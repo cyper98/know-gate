@@ -11,6 +11,7 @@ links:
   - "[[docs/system-architecture.md]]"
   - "[[docs/codebase-summary.md]]"
 changelog:
+  - 2026-06-14 | manual | auth shipped: bootstrap first user, magic link, OAuth; updated troubleshooting
   - 2026-06-14 | manual | documented make init, /ready, alembic troubleshooting
   - 2026-06-14 | manual | removed all development-stage wording (docs are system-only)
   - 2026-06-14 | manual | removed references to internal plan files

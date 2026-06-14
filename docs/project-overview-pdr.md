@@ -12,6 +12,7 @@ links:
   - "[[docs/codebase-summary.md]]"
   - "[[README.md]]"
 changelog:
+  - 2026-06-14 | manual | marked Auth + RBAC capability as shipped; added argon2id, OAuth PKCE, AES-256-GCM, ClientIPMiddleware, audit log details
   - 2026-06-14 | manual | removed all development-stage wording + roadmap file (docs are system-only)
   - 2026-06-14 | manual | removed references to internal brainstorm + plan files (kept on local only)
   - 2026-06-14 | manual | initial PDR draft
@@ -62,11 +63,16 @@ Locked from initial design sessions. Internal implementation planning is tracked
 - Query language auto-detect and user-pick
 - Answer always in source language (no translation per D4)
 
-**Auth + RBAC:**
-- Email/password (bootstrap) + Google/GitHub OAuth + magic link
-- JWT (RS256, 15-min access + 30-day refresh with rotation)
-- Flat 3-role model: admin / editor / member
+**Auth + RBAC:** *(shipped)*
+- Email/password (bootstrap) + Google/GitHub OAuth (PKCE) + magic link
+- JWT (RS256, 15-min access + 30-day refresh with rotation, `jti` revocation)
+- Passwords: argon2id per OWASP 2024 params; transparent rehash on parameter drift
+- 3-role RBAC: admin (all) / editor (view + edit metadata) / member (view)
+- 9 permission gates: view_doc, edit_doc_metadata, delete_doc, manage_users, manage_roles, manage_groups, manage_sources, manage_settings, invite_user, view_audit_log
 - Access group model (user → group, doc → group, AND-logic permission filter)
+- `ClientIPMiddleware` reads `X-Forwarded-For` for audit + rate limit (sliding-window in Redis)
+- AES-256-GCM encryption for OAuth tokens at rest (`KG_ENCRYPTION_KEY`)
+- `audit_log` table: append-only, best-effort, non-blocking writers, immutable by convention
 
 **UX:**
 - Next.js 14 web UI + Python CLI + REST API

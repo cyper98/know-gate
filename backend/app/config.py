@@ -128,9 +128,24 @@ class Settings(BaseSettings):
     feedback_retention_days: int = 90
 
     # === Bootstrap Admin ===
+    # These defaults exist ONLY for the `make seed` dev workflow; production
+    # deployments must set them explicitly. The validator below rejects the
+    # dev default in production.
     bootstrap_admin_email: str = "admin@knowgate.local"
     bootstrap_admin_password: SecretStr = SecretStr("ChangeMe123!")
     bootstrap_admin_name: str = "Admin"
+
+    @field_validator("bootstrap_admin_password")
+    @classmethod
+    def _reject_dev_password_in_production(cls, v: SecretStr, info) -> SecretStr:
+        """Refuse to start in production with the dev-default admin password."""
+        env = (info.data or {}).get("kg_env", "development")
+        if env == "production" and v.get_secret_value() == "ChangeMe123!":
+            raise ValueError(
+                "bootstrap_admin_password must be set explicitly in production "
+                "(KG_BOOTSTRAP_ADMIN_PASSWORD env var); the dev default is not allowed."
+            )
+        return v
 
     # === Computed URLs (no env var - derived from atomic vars) ===
 

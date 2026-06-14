@@ -21,6 +21,12 @@ make up
 # 5. Verify
 curl http://localhost:8000/health
 open http://localhost:3000   # Web UI
+
+# 6. Bootstrap the first admin (only first POST /api/v1/auth/register succeeds)
+curl -X POST http://localhost:8000/api/v1/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@knowgate.local","password":"ChangeMe123!","name":"Admin"}'
+# Full endpoint list: http://localhost:8000/docs
 ```
 
 ## Services (docker compose)
@@ -77,8 +83,11 @@ know-gate/
 
 ## Documentation
 
-- [Architecture](plans/260613-knowgate-mvp-architecture/architecture.md) — full system design
-- [Tech Stack ADR](plans/260613-knowgate-mvp-architecture/decisions/tech-stack.md)
+- [code-standards](docs/code-standards.md)
+- [codebase-summary](docs/codebase-summary.md)
+- [deployment-guide](docs/deployment-guide.md)
+- [project-overview-pdr](docs/project-overview-pdr.md)
+- [system-architecture](docs/system-architecture.md)
 
 ## License
 

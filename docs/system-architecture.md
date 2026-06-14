@@ -12,6 +12,7 @@ links:
   - "[[docs/codebase-summary.md]]"
   - "[[README.md]]"
 changelog:
+  - 2026-06-14 | manual | auth shipped: 6 endpoints, JWT RS256, argon2id, OAuth Google+GitHub, magic link, RBAC, audit log
   - 2026-06-14 | manual | added init container (Alembic + Qdrant + MinIO + seed) to topology
   - 2026-06-14 | manual | removed all development-stage wording (docs are system-only)
   - 2026-06-14 | manual | removed references to internal architecture/ADR files (kept on local only)
@@ -89,7 +90,7 @@ graph TB
 
 | Service | Tech | Responsibility | Scaling |
 |---------|------|----------------|---------|
-| **API** | FastAPI 0.115 + SQLAlchemy 2 async | REST endpoints, auth, validation, permission filter | Horizontal (stateless) |
+| **API** | FastAPI 0.115 + SQLAlchemy 2 async | REST endpoints, auth (RS256 JWT + argon2id + OAuth PKCE + magic link), 3-role RBAC, audit log, validation | Horizontal (stateless) |
 | **Worker** | Celery 5.4 + bge-m3 (CPU) | Sync, parse, chunk, embed, index, eval aggregation | Horizontal (add workers) |
 | **Beat** | Celery Beat | Periodic sync poll, cleanup, weekly digest | Single (leader) |
 | **Frontend** | Next.js 14 App Router + TS + Tailwind + shadcn/ui | Query UI, admin dashboard, i18n | Horizontal (stateless) |
@@ -107,6 +108,8 @@ graph TB
 **Read path (query):** User → API auth (JWT) → query rewrite + permission filter (`user.groups ∩ doc.groups`) → embed query (bge-m3, Redis-cached 5 min) → Qdrant hybrid search (vector + payload filter) → rerank (bge-reranker-v2-m3) → LiteLLM call (OpenAI default, Ollama fallback) → answer with citation → log to `queries` table → return.
 
 **Permission invariant:** chunks only reach the LLM if the user is in an access group that the document is also in. Enforced at three layers (API filter, Qdrant payload filter, post-retrieval check) for defense in depth.
+
+**Auth path:** Client → `/api/v1/auth/login` (or `register` / `oauth/{provider}` / `magic-link`) → user authenticated → JWT pair issued (RS256, 15-min access + 30-day refresh with rotation, `jti` claim, `roles` claim) → client sends `Authorization: Bearer <access>` on subsequent requests → `ClientIPMiddleware` (registered after CORS, reads `X-Forwarded-For` first-hop) injects `request.state.client_ip` → endpoint deps `get_current_user` (verifies signature + type + jti-not-revoked) and `require_permission(Permission.X)` (role → permission check). Login is rate-limited (sliding-window in Redis, key = `ip:sha256(email)[:16]`, default 5/15min). OAuth flow uses Authlib `AsyncOAuth2Client` with PKCE; state stored in Redis (5-min TTL) and atomically popped on callback (CSRF defense). Magic-link tokens are 32 random bytes, SHA-256-hashed at rest in Redis, 15-min TTL, one-shot (atomic `GET+DEL` via pipeline). Passwords are argon2id (OWASP 2024 params: `time_cost=3`, `memory_cost=64 MiB`, `parallelism=4`); successful login transparently re-hashes if `needs_rehash()` detects outdated params. OAuth access tokens at rest are encrypted with AES-256-GCM (12-byte nonce, key from `KG_ENCRYPTION_KEY`). Every permission-relevant mutation emits an `audit_log` row (best-effort, non-blocking via `asyncio.create_task`); log writes never raise to keep request flow alive.
 
 ## 5. Tech Stack Snapshot
 

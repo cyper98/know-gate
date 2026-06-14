@@ -14,6 +14,8 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_
 from starlette.requests import Request
 from starlette.responses import Response
 
+from app.api.v1 import auth as auth_router
+from app.audit.middleware import ClientIPMiddleware
 from app.cache.client import check_redis, close_redis
 from app.config import get_settings
 from app.db.init import check_connection
@@ -89,6 +91,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Client IP capture (for audit + rate limit). Must come after CORS so
+# X-Forwarded-For is parsed correctly when behind a proxy.
+app.add_middleware(ClientIPMiddleware)
+
+# Register API routers
+app.include_router(auth_router.router, prefix="/api/v1")
 
 
 @app.middleware("http")

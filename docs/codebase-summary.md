@@ -10,6 +10,7 @@ links:
   - "[[docs/system-architecture.md]]"
   - "[[docs/project-overview-pdr.md]]"
 changelog:
+  - 2026-06-14 | manual | auth shipped: 6 endpoints, JWT RS256, argon2id, OAuth Google+GitHub, magic link, RBAC, audit log
   - 2026-06-14 | manual | added app/db, app/vector, app/storage, app/cache, alembic, scripts; 14 SQLAlchemy tables; init container; make init
   - 2026-06-14 | manual | removed all development-stage wording (docs are system-only)
   - 2026-06-14 | manual | removed references to internal planning and brainstorming files
@@ -51,7 +52,7 @@ Python 3.12, FastAPI 0.115, managed via `pyproject.toml` + `pip`/`uv`.
 | `Dockerfile` | Multi-stage: builder (hatch) → runtime (slim, non-root UID 1001, healthcheck) |
 | `.dockerignore` | Excludes `.venv`, `.pytest_cache`, etc. from build context |
 | `app/__init__.py` | Package marker |
-| `app/main.py` | FastAPI app, lifespan, CORS, metrics middleware, `/health`, `/ready` (4-backend parallel check, 2s timeout each, 200 or 503), `/metrics`, `/api/v1` |
+| `app/main.py` | FastAPI app, lifespan, CORS, metrics middleware, `ClientIPMiddleware`, `/health`, `/ready` (4-backend parallel check, 2s timeout each, 200 or 503), `/metrics`, `/api/v1`, auth router mounted at `/api/v1/auth` |
 | `app/config.py` | Pydantic v2 `Settings`, atomic env vars, computed URLs, encryption key validator |
 | `app/logging.py` | structlog JSON (prod) + console (dev), bridges stdlib logging |
 | `app/db/` | SQLAlchemy 2 async ORM, session factory, 14-table model registry (users, roles, user_roles, access_groups, user_groups, documents, document_groups, chunks, sources, sync_jobs, queries, feedback, audit_log, system_settings) |
@@ -60,7 +61,12 @@ Python 3.12, FastAPI 0.115, managed via `pyproject.toml` + `pip`/`uv`.
 | `app/db/session.py` | Async session factory + `check_connection()` for `/ready` |
 | `app/vector/` | Qdrant async client (lazy singleton), `chunks` collection init with HNSW (m=16, ef_construct=100) + `group_ids` payload index, indexer + payload schema helpers |
 | `app/storage/` | boto3 S3 client pointed at MinIO, `documents` bucket init with versioning, uploader helpers |
-| `app/cache/` | Redis async client, JSON get/set/del with TTL, sliding-window rate limit, OAuth state, JTI revocation, hot-queries sorted set, key naming convention |
+| `app/cache/` | Redis async client, JSON get/set/del with TTL, sliding-window rate limit, OAuth state, JTI revocation, magic-link token store, hot-queries sorted set, key naming convention |
+| `app/auth/` | Auth + RBAC: `jwt.py` (RS256 mint/verify, 15-min access + 30-day refresh, jti, rotation), `password.py` (argon2id hash/verify/rehash, OWASP 2024 params), `oauth.py` (Authlib AsyncOAuth2Client, Google + GitHub providers, PKCE, state-in-Redis CSRF), `magic_link.py` (32-byte token, SHA-256 at rest, 15-min TTL, one-shot in Redis), `permissions.py` (`Permission` enum, `ROLE_PERMISSIONS` map, `CurrentUser` dep, `require_permission` factory) |
+| `app/audit/` | Audit log: `log.py` (`log_event()` append-only insert into `audit_log` table, best-effort non-blocking; `@audited()` decorator for service methods), `middleware.py` (`ClientIPMiddleware` + `get_client_ip()` reads `X-Forwarded-For` for audit + rate limit) |
+| `app/crypto/` | Symmetric encryption: `aes.py` (AES-256-GCM via `cryptography` lib, 12-byte nonce, nonce-prefixed output; `encrypt_str` / `decrypt_str` for at-rest secrets, key from `KG_ENCRYPTION_KEY`) |
+| `app/services/` | Cross-cutting service helpers: `email.py` (magic-link email sender via SMTP, MailHog in dev) |
+| `app/api/v1/` | API routers: `auth.py` — 6 endpoints (`/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/oauth/{provider}` + `/callback`, `/auth/magic-link` + `/verify`); Pydantic request/response schemas; role-claim JWT; audit emit on register / login / logout |
 | `alembic/` | Alembic migrations (env, script template, `versions/0001_initial_schema.py`) |
 | `scripts/init.py` | Idempotent infra init: Qdrant collection + MinIO bucket + seed (run by Compose `init` container) |
 | `scripts/seed.py` | Default data: 1 admin user, 3 roles, 2 access groups, `system_settings` singleton |
@@ -71,7 +77,7 @@ Python 3.12, FastAPI 0.115, managed via `pyproject.toml` + `pip`/`uv`.
 
 **Data model:** 14 PostgreSQL tables registered with `Base.metadata`. Migrations are versioned under `backend/alembic/versions/`. All models use UUID primary keys (server-side `gen_random_uuid()`) and `created_at` / `updated_at` timestamp mixins.
 
-**Currently validated:** pytest smoke pass; ruff/mypy configured; imports work; CORS allows `localhost:3000` and `${KG_DOMAIN}:3000`.
+**Currently validated:** pytest smoke pass; auth + rbac tests pass (register / login / refresh / logout / oauth / magic-link / RBAC enforcement / audit log writers); ruff/mypy configured; imports work; CORS allows `localhost:3000` and `${KG_DOMAIN}:3000`.
 
 **Test coverage threshold:** `--cov-fail-under=80` (set in pyproject, will gate as the test suite grows).
 
@@ -179,7 +185,6 @@ Not used yet. `make cli-install` target exists for future install in editable mo
 
 ## 10. What's NOT shipped yet (planned for future)
 
-- Auth: endpoints, OAuth handlers, JWT middleware, RBAC filter, audit log writers.
 - Source Connectors: Google Drive + Notion, sync job lifecycle.
 - Ingestion Pipeline: Unstructured parser, chunker, bge-m3 embed, Qdrant upsert.
 - Retrieval + LLM: Hybrid search, reranker, query rewrite, LLM call, answer with citation.
