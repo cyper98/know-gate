@@ -12,6 +12,7 @@ links:
   - "[[docs/codebase-summary.md]]"
   - "[[README.md]]"
 changelog:
+  - 2026-06-14 | manual | added init container (Alembic + Qdrant + MinIO + seed) to topology
   - 2026-06-14 | manual | removed all development-stage wording (docs are system-only)
   - 2026-06-14 | manual | removed references to internal architecture/ADR files (kept on local only)
   - 2026-06-14 | manual | condensed from full architecture doc
@@ -50,6 +51,9 @@ graph TB
         REDIS[(Redis 7)]
         MINIO[(MinIO S3)]
     end
+    subgraph Bootstrap
+        INIT[Init container<br/>Alembic + Qdrant + MinIO + seed]
+    end
     subgraph External
         DRIVE[Google Drive API]
         NOTION[Notion API]
@@ -59,6 +63,10 @@ graph TB
     end
     WEB --> NGINX --> API
     CLI --> API
+    INIT -.->|alembic upgrade| PG
+    INIT -.->|init collection| QD
+    INIT -.->|init bucket| MINIO
+    INIT -.->|seed| PG
     API --> PG
     API --> QD
     API --> REDIS
@@ -134,7 +142,7 @@ Full alternatives matrix is tracked internally (see internal architecture doc).
 
 ## 6. Deployment Shape
 
-- **Dev / single-host:** `make up` brings up 10 services via Docker Compose (api, worker, beat, frontend, postgres, qdrant, redis, minio, mailhog, litellm).
+- **Dev / single-host:** `make up` brings up 11 services via Docker Compose (init, api, worker, beat, frontend, postgres, qdrant, redis, minio, mailhog, litellm). The `init` one-shot container runs `alembic upgrade head`, then `python -m scripts.init` (Qdrant collection + MinIO bucket + seed) before the API starts; the API depends on `init: service_completed_successfully`.
 - **Prod K8s:** Helm chart with templates for all services, Ingress, PVC, Secrets. Compose → K8s migration is by config swap, not rewrite (Helm on the public roadmap).
 - **Public surface:** port 80/443 (Nginx) → API (8000) and Frontend (3000) internal. All other ports (DB, Qdrant, Redis, MinIO) are internal-only.
 
@@ -149,7 +157,7 @@ Full alternatives matrix is tracked internally (see internal architecture doc).
 | Documents | list / detail / patch / delete / preview | user / editor / admin |
 | RBAC | users / roles / groups CRUD + assign | admin |
 | Settings | `GET/PATCH /api/v1/settings`, `GET /api/v1/settings/audit-log` | admin |
-| Infra | `/health`, `/ready`, `/metrics`, `/api/v1/openapi.json` | public |
+| Infra | `/health` (liveness), `/ready` (4-backend parallel: PG, Qdrant, Redis, MinIO; 2s timeout each, 200 or 503), `/metrics`, `/api/v1/openapi.json` | public |
 
 ~40 routes total. URL path versioned (`/api/v1/`, `/api/v2/`). OpenAPI auto-generated.
 

@@ -64,6 +64,9 @@ migrate:
 seed:
 	$(COMPOSE) exec api python -m scripts.seed
 
+init:
+	$(COMPOSE) exec api python -m scripts.init
+
 install:
 	cd backend && python3 -m venv .venv
 	cd backend && .venv/bin/pip install --upgrade pip

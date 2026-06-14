@@ -119,22 +119,25 @@ services:
         condition: service_healthy
     networks: [kg-net]
 
-  # === Init container (runs migrations + seed) ===
+  # === Init container (runs migrations + qdrant + minio + seed) ===
   init:
     build:
       context: ../backend
       dockerfile: Dockerfile
     container_name: kg-init
     restart: "no"
-    command: ["sh", "-c", "echo 'Init container placeholder. Real init added in Phase 02 (migrations + seed).'"]
-    environment:
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_NAME: ${DB_NAME}
+    command: ["sh", "-c", "alembic upgrade head && python -m scripts.init"]
+    env_file: ../.env
+    volumes:
+      - ../secrets:/app/secrets:ro
     depends_on:
       postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     networks: [kg-net]
 
@@ -165,6 +168,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      init:
+        condition: service_completed_successfully
       litellm:
         condition: service_started
     networks: [kg-net]

@@ -9,6 +9,7 @@ links:
   - "[[docs/system-architecture.md]]"
   - "[[README.md]]"
 changelog:
+  - 2026-06-14 | manual | added Alembic naming convention + autogenerate rule
   - 2026-06-14 | manual | removed all development-stage wording (docs are system-only)
   - 2026-06-14 | manual | removed references to internal architecture/plan files
   - 2026-06-14 | manual | initial code standards
@@ -48,6 +49,12 @@ changelog:
 **Error handling:** catch narrow exception types, log with `structlog` context binding, re-raise with custom app exception classes. No bare `except:`.
 
 **Naming:** snake_case modules/functions, PascalCase classes, UPPER_SNAKE_CASE constants. Module names self-documenting (kebab-case only for the file name on disk; Python import name stays snake_case equivalent).
+
+**ORM / Alembic:**
+- All models inherit from `Base` (`app/db/models/base.py`) and use `Mapped[...]` typed columns. UUID primary keys via `UUIDPrimaryKeyMixin`; timestamps via `TimestampMixin`.
+- `Base.metadata` carries a SQLAlchemy naming convention (`ix_`, `uq_`, `ck_`, `fk_`, `pk_` templates) so Alembic auto-generates stable, predictable constraint names.
+- Migrations live in `backend/alembic/versions/`. To add a schema change: edit the model, then `alembic revision --autogenerate -m "<short description>"`, review the diff, then `alembic upgrade head`. Autogenerate is a starting point, not the final word — hand-edit when needed (server defaults, op rewrites, data backfills).
+- Never edit a migration that has already been applied to a shared environment; add a new one.
 
 ## 3. TypeScript (frontend)
 

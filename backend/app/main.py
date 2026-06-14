@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
@@ -13,8 +14,12 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_
 from starlette.requests import Request
 from starlette.responses import Response
 
+from app.cache.client import check_redis, close_redis
 from app.config import get_settings
+from app.db.init import check_connection
 from app.logging import configure_logging, get_logger
+from app.storage.client import check_minio
+from app.vector.client import check_qdrant, close_qdrant
 
 settings = get_settings()
 configure_logging(
@@ -35,16 +40,24 @@ REQUEST_DURATION = Histogram(
     ["method", "endpoint"],
 )
 
-# CORS allowed origins (Phase 03: tighten per OAuth callback)
+# CORS allowed origins (tighten per OAuth callback)
 CORS_ALLOWED_ORIGINS = [
     f"http://localhost:3000",
     f"http://{settings.kg_domain}:3000",
 ]
 
+# Health check timeout (per backend, per check)
+HEALTH_CHECK_TIMEOUT_SECONDS = 2.0
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """Application lifespan - startup/shutdown hooks."""
+    """Application lifespan - startup/shutdown hooks.
+
+    On startup: log info (per-backend init is handled by docker-compose init
+    container or dev `make up` workflow).
+    On shutdown: close Redis + Qdrant clients gracefully.
+    """
     logger.info(
         "knowgate_starting",
         env=settings.kg_env,
@@ -53,6 +66,9 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     )
     yield
     logger.info("knowgate_shutdown")
+    # Graceful close
+    await close_redis()
+    await close_qdrant()
 
 
 app = FastAPI(
@@ -91,22 +107,50 @@ async def metrics_middleware(request: Request, call_next: Response) -> Response:
     return response
 
 
+async def _check_with_timeout(coro, name: str) -> dict[str, str]:
+    """Run a health check with timeout. Returns {name, status, error?}.
+
+    all check timeouts 2s.
+    """
+    try:
+        ok = await asyncio.wait_for(coro, timeout=HEALTH_CHECK_TIMEOUT_SECONDS)
+        return {"name": name, "status": "ok" if ok else "fail"}
+    except asyncio.TimeoutError:
+        return {"name": name, "status": "fail", "error": "timeout"}
+    except Exception as e:
+        return {"name": name, "status": "fail", "error": str(e)[:200]}
+
+
 @app.get("/health", tags=["health"])
 async def health() -> dict[str, str]:
-    """Liveness probe - process is up."""
+    """Liveness probe - process is up.
+
+    Does NOT check dependencies (use /ready for that). K8s uses this for
+    'is the process alive?' — should always return 200 if the app started.
+    """
     return {"status": "ok"}
 
 
 @app.get("/ready", tags=["health"])
 async def ready() -> JSONResponse:
-    """Readiness probe - dependencies (DB, Redis, Qdrant, MinIO) are reachable.
+    """Readiness probe - all 4 backends (PG, Qdrant, Redis, MinIO) reachable.
 
-    Full implementation in Phase 02 (Data Layer). Returns 200 if process up.
+    200 if all healthy, 503 if any fail.
+    Each check has 2s timeout. Checks run in parallel.
     """
-    # TODO Phase 02: check postgres, redis, qdrant, minio
+    checks = await asyncio.gather(
+        _check_with_timeout(check_connection(), "postgres"),
+        _check_with_timeout(check_qdrant(), "qdrant"),
+        _check_with_timeout(check_redis(), "redis"),
+        _check_with_timeout(check_minio(), "minio"),
+    )
+    all_ok = all(c["status"] == "ok" for c in checks)
     return JSONResponse(
-        status_code=200,
-        content={"status": "ready", "checks": {"process": "ok"}},
+        status_code=200 if all_ok else 503,
+        content={
+            "status": "ready" if all_ok else "degraded",
+            "checks": {c["name"]: c for c in checks},
+        },
     )
 
 

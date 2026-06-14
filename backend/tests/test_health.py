@@ -1,7 +1,4 @@
 """Smoke test for /health endpoint.
-
-Phase 01 acceptance: backend boots, /health returns 200.
-Full integration tests added per-phase (see plan).
 """
 
 from fastapi.testclient import TestClient

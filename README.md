@@ -68,7 +68,7 @@ know-gate/
 │   ├── lib/
 │   ├── package.json
 │   └── Dockerfile
-├── cli/             # Python CLI (Typer) — Phase 9
+├── cli/             # Python CLI (Typer)
 ├── deploy/          # docker-compose.yml + env templates
 ├── secrets/         # JWT keys (gitignored, generated)
 ├── plans/           # Architecture + implementation plan

@@ -11,6 +11,7 @@ links:
   - "[[docs/system-architecture.md]]"
   - "[[docs/codebase-summary.md]]"
 changelog:
+  - 2026-06-14 | manual | documented make init, /ready, alembic troubleshooting
   - 2026-06-14 | manual | removed all development-stage wording (docs are system-only)
   - 2026-06-14 | manual | removed references to internal plan files
   - 2026-06-14 | manual | initial deployment guide
@@ -57,7 +58,7 @@ Total time: ~5 min for image build on first run; subsequent `make up` < 30s.
 
 | Service | Port | URL | Purpose | Notes |
 |---------|------|-----|---------|-------|
-| API | 8000 | http://localhost:8000 | FastAPI backend | Health: `/health`, OpenAPI: `/docs` |
+| API | 8000 | http://localhost:8000 | FastAPI backend | Liveness: `/health`, readiness: `/ready` (PG + Qdrant + Redis + MinIO), OpenAPI: `/docs`, metrics: `/metrics` |
 | Frontend | 3000 | http://localhost:3000 | Next.js web UI | Multilingual (VI/EN) |
 | LiteLLM | 4000 | http://localhost:4000 | LLM gateway (OpenAI-compatible) | Default model: `gpt-4o-mini` |
 | PostgreSQL | 5432 | localhost:5432 | App data + audit | User: `knowgate`, pwd: `knowgate_dev_pwd` |
@@ -67,6 +68,7 @@ Total time: ~5 min for image build on first run; subsequent `make up` < 30s.
 | MailHog | 1025 / 8025 | http://localhost:8025 | SMTP dev catcher | All emails land here |
 | Worker | — | — | Celery worker (sync, embed, index) | No public port |
 | Beat | — | — | Celery scheduler | No public port |
+| Init | — | — | One-shot container: `alembic upgrade head` + Qdrant collection + MinIO bucket + seed | API waits on `service_completed_successfully` |
 
 ## 4. Dev Commands
 
@@ -78,8 +80,9 @@ Total time: ~5 min for image build on first run; subsequent `make up` < 30s.
 | `make ps` | List running services with status |
 | `make restart` | Restart all services |
 | `make build` | Rebuild images |
-| `make migrate` | Run Alembic DB migrations (when Data Layer is added) |
-| `make seed` | Seed initial data (admin user + roles, when Auth is added) |
+| `make migrate` | Run Alembic DB migrations (`alembic upgrade head` inside `api` container) |
+| `make seed` | Seed default data: admin user, 3 roles, 2 access groups, `system_settings` singleton |
+| `make init` | Run infra init only (Qdrant collection + MinIO bucket + seed) — DB schema is handled by `make migrate` |
 | `make test` | Run backend tests (pytest) |
 | `make lint` | Run linters (ruff + eslint) |
 | `make format` | Run formatters (ruff format + prettier) |
@@ -101,6 +104,13 @@ Compose fails fast on missing required vars (`${VAR:?VAR required}`).
 
 ### Port already in use
 Edit `.env` to change the port for the conflicting service (e.g. `DB_PORT=5433`, `QDRANT_PORT=6335`).
+
+### `alembic upgrade` fails
+Most common: Postgres is not yet healthy, or env vars are missing. Check:
+1. `make ps` — `kg-postgres` should be `(healthy)`. Wait 10-20s after `make up` on first run.
+2. `make logs init` — see the full error from the init container.
+3. Verify `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` in `.env` match `kg-postgres` (default host is `localhost` for host-side, `postgres` for in-network).
+4. If the schema is already partially applied, `make migrate` from scratch: `make clean && make up`.
 
 ### API not ready (after `make up`)
 Run `make logs api` to see startup errors. Common causes:

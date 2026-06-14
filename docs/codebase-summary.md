@@ -10,6 +10,7 @@ links:
   - "[[docs/system-architecture.md]]"
   - "[[docs/project-overview-pdr.md]]"
 changelog:
+  - 2026-06-14 | manual | added app/db, app/vector, app/storage, app/cache, alembic, scripts; 14 SQLAlchemy tables; init container; make init
   - 2026-06-14 | manual | removed all development-stage wording (docs are system-only)
   - 2026-06-14 | manual | removed references to internal planning and brainstorming files
   - 2026-06-14 | manual | initial codebase summary
@@ -44,20 +45,33 @@ know-gate/                       (root)
 
 Python 3.12, FastAPI 0.115, managed via `pyproject.toml` + `pip`/`uv`.
 
-| File | Purpose |
-|------|---------|
+| File / dir | Purpose |
+|------------|---------|
 | `pyproject.toml` | Single source of deps + tool config (ruff, mypy strict, pytest) |
 | `Dockerfile` | Multi-stage: builder (hatch) → runtime (slim, non-root UID 1001, healthcheck) |
 | `.dockerignore` | Excludes `.venv`, `.pytest_cache`, etc. from build context |
 | `app/__init__.py` | Package marker |
-| `app/main.py` | FastAPI app, lifespan, CORS, metrics middleware, `/health`, `/ready`, `/metrics`, `/api/v1` |
+| `app/main.py` | FastAPI app, lifespan, CORS, metrics middleware, `/health`, `/ready` (4-backend parallel check, 2s timeout each, 200 or 503), `/metrics`, `/api/v1` |
 | `app/config.py` | Pydantic v2 `Settings`, atomic env vars, computed URLs, encryption key validator |
 | `app/logging.py` | structlog JSON (prod) + console (dev), bridges stdlib logging |
-| `tests/test_health.py` | 3 smoke tests: `/health`, `/metrics`, `/api/v1` |
+| `app/db/` | SQLAlchemy 2 async ORM, session factory, 14-table model registry (users, roles, user_roles, access_groups, user_groups, documents, document_groups, chunks, sources, sync_jobs, queries, feedback, audit_log, system_settings) |
+| `app/db/models/` | One file per model: `User`, `Role`, `UserRole`, `AccessGroup`, `UserGroup`, `Document`, `DocumentGroup`, `Chunk`, `Source`, `SyncJob`, `Query`, `Feedback`, `AuditLog`, `SystemSettings` (plus `Base` with `TimestampMixin`, `UUIDPrimaryKeyMixin`, naming convention) |
+| `app/db/enums.py` | Enum types (user status, doc status, sync status, etc.) |
+| `app/db/session.py` | Async session factory + `check_connection()` for `/ready` |
+| `app/vector/` | Qdrant async client (lazy singleton), `chunks` collection init with HNSW (m=16, ef_construct=100) + `group_ids` payload index, indexer + payload schema helpers |
+| `app/storage/` | boto3 S3 client pointed at MinIO, `documents` bucket init with versioning, uploader helpers |
+| `app/cache/` | Redis async client, JSON get/set/del with TTL, sliding-window rate limit, OAuth state, JTI revocation, hot-queries sorted set, key naming convention |
+| `alembic/` | Alembic migrations (env, script template, `versions/0001_initial_schema.py`) |
+| `scripts/init.py` | Idempotent infra init: Qdrant collection + MinIO bucket + seed (run by Compose `init` container) |
+| `scripts/seed.py` | Default data: 1 admin user, 3 roles, 2 access groups, `system_settings` singleton |
+| `scripts/init_helpers.py` | Per-step init coroutines (Qdrant / MinIO / seed) |
+| `tests/test_health.py` | Smoke tests: `/health`, `/metrics`, `/api/v1` |
 | `.env` | Local env (gitignored) |
 | `.venv/` | Virtualenv (gitignored) |
 
-**Currently validated:** 3/3 pytest pass; ruff/mypy configured; imports work; CORS allows `localhost:3000` and `${KG_DOMAIN}:3000`.
+**Data model:** 14 PostgreSQL tables registered with `Base.metadata`. Migrations are versioned under `backend/alembic/versions/`. All models use UUID primary keys (server-side `gen_random_uuid()`) and `created_at` / `updated_at` timestamp mixins.
+
+**Currently validated:** pytest smoke pass; ruff/mypy configured; imports work; CORS allows `localhost:3000` and `${KG_DOMAIN}:3000`.
 
 **Test coverage threshold:** `--cov-fail-under=80` (set in pyproject, will gate as the test suite grows).
 
@@ -100,13 +114,14 @@ Not used yet. `make cli-install` target exists for future install in editable mo
 
 | File | Purpose |
 |------|---------|
-| `docker-compose.yml` | 10-service stack: postgres, redis, qdrant, minio, mailhog, litellm, init, api, worker, beat, frontend. All env-driven, fail-fast on missing required vars, healthchecks, named volumes, single `kg-net` bridge network. |
+| `docker-compose.yml` | 11-service stack: init (one-shot), api, worker, beat, frontend, postgres, redis, qdrant, minio, mailhog, litellm. All env-driven, fail-fast on missing required vars, healthchecks, named volumes, single `kg-net` bridge network. |
 | `docker-compose.dev.yml` | Dev overlay: hot-reload (uvicorn `--reload`, `npm run dev`), source bind mounts, `KG_LOG_LEVEL=DEBUG`, builder target for frontend. |
 | `litellm/config.yaml` | LiteLLM proxy config: `gpt-4o-mini` (default, OpenAI) + `ollama/llama3` (fallback), `enable_fallbacks: true`, `request_timeout: 30`, master key from env. |
 
 **Compose file structure:**
 - Atomic env vars: `${DB_USER:?DB_USER required}` syntax fails fast at startup.
 - Healthchecks on every long-running service.
+- The `init` one-shot container runs `alembic upgrade head` + `python -m scripts.init` (Qdrant collection + MinIO bucket + seed) and exits 0. The `api` service depends on `init: service_completed_successfully`, so it never serves traffic against an un-migrated schema.
 - Dependents use `condition: service_healthy` (api waits for postgres, redis, qdrant, minio, litellm).
 - Volumes: `postgres-data`, `redis-data`, `qdrant-data`, `minio-data`.
 
@@ -126,21 +141,7 @@ Not used yet. `make cli-install` target exists for future install in editable mo
 
 ## 7. Env Config (`.env.example`)
 
-121 lines, all atomic. Key blocks:
-
-- **General:** `KG_ENV`, `KG_LOG_LEVEL`, `KG_DOMAIN`.
-- **JWT (RS256):** key paths, algorithm, 15-min access, 30-day refresh.
-- **Encryption:** `KG_ENCRYPTION_KEY` (required, 32-byte base64).
-- **PostgreSQL:** `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`.
-- **Redis:** `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, `REDIS_DB`.
-- **Qdrant:** `QDRANT_HOST`, `QDRANT_PORT`, `QDRANT_GRPC_PORT`, `QDRANT_API_KEY`, `QDRANT_COLLECTION`.
-- **MinIO:** `MINIO_ENDPOINT`, `MINIO_PORT`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `MINIO_BUCKET`, `MINIO_PUBLIC_ENDPOINT`.
-- **LLM (LiteLLM):** `LITELLM_HOST`, `LITELLM_PORT`, `LITELLM_MASTER_KEY`, `LITELLM_DEFAULT_MODEL`, `LITELLM_FALLBACK_MODEL`.
-- **OpenAI + Ollama** provider keys.
-- **Embedding:** `EMBEDDING_MODEL_NAME` (BAAI/bge-m3), `EMBEDDING_DIM` (1024), `EMBEDDING_DEVICE` (cpu/cuda), `EMBEDDING_BATCH_SIZE`, `EMBEDDING_CACHE_TTL`.
-- **OAuth:** Google + GitHub client id/secret/redirect/scope (all optional in dev).
-- **SMTP:** `SMTP_HOST` (mailhog in dev), port, user, password, from, TLS.
-- **Rate limits, search, sync, query, feedback retention, bootstrap admin.**
+121 lines, all atomic. Key blocks: `KG_*` (general + JWT + encryption), `DB_*` (Postgres), `REDIS_*`, `QDRANT_*` (host/port/grpc/api_key/collection), `MINIO_*` (endpoint/port/user/password/bucket), `LITELLM_*` (host/port/key/model), `OPENAI_API_KEY`, `EMBEDDING_*` (model/dim/device/batch/cache_ttl), OAuth (Google + GitHub), `SMTP_*`, rate limits, sync, query, feedback retention, bootstrap admin.
 
 ## 8. Make Targets
 
@@ -154,8 +155,9 @@ Not used yet. `make cli-install` target exists for future install in editable mo
 | `restart` | Restart all |
 | `build` | Build images |
 | `pull` | Pull base images |
-| `migrate` | `alembic upgrade head` inside api container (when Data Layer is added) |
-| `seed` | `python -m scripts.seed` inside api (when Auth is added) |
+| `migrate` | `alembic upgrade head` inside api container |
+| `seed` | `python -m scripts.seed` inside api (admin user, 3 roles, 2 access groups, system_settings) |
+| `init` | `python -m scripts.init` inside api (Qdrant collection + MinIO bucket + seed; idempotent) |
 | `install` | Create backend `.venv` + pip install editable `[dev]` |
 | `test` | `pytest` in backend venv |
 | `lint` | ruff (BE) + npm run lint (FE) |
@@ -177,8 +179,7 @@ Not used yet. `make cli-install` target exists for future install in editable mo
 
 ## 10. What's NOT shipped yet (planned for future)
 
-- Data Layer: PostgreSQL schemas, Alembic migrations, Qdrant collection init.
-- Auth: endpoints, OAuth handlers, JWT middleware, RBAC filter, audit log.
+- Auth: endpoints, OAuth handlers, JWT middleware, RBAC filter, audit log writers.
 - Source Connectors: Google Drive + Notion, sync job lifecycle.
 - Ingestion Pipeline: Unstructured parser, chunker, bge-m3 embed, Qdrant upsert.
 - Retrieval + LLM: Hybrid search, reranker, query rewrite, LLM call, answer with citation.
