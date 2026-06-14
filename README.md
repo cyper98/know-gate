@@ -26,6 +26,15 @@ open http://localhost:3000   # Web UI
 curl -X POST http://localhost:8000/api/v1/auth/register \
   -H 'Content-Type: application/json' \
   -d '{"email":"admin@knowgate.local","password":"ChangeMe123!","name":"Admin"}'
+
+# 7. (Optional) Add a source — first login, capture access token, then:
+TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@knowgate.local","password":"ChangeMe123!"}' | jq -r .access_token)
+curl -X POST http://localhost:8000/api/v1/sources \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"My Drive","type":"google_drive","config":{"access_token":"...","refresh_token":"...","client_id":"...","client_secret":"...","token_expires_at":0}}'
 # Full endpoint list: http://localhost:8000/docs
 ```
 

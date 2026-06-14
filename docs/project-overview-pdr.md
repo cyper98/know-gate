@@ -12,6 +12,7 @@ links:
   - "[[docs/codebase-summary.md]]"
   - "[[README.md]]"
 changelog:
+  - 2026-06-14 | manual | marked Source Connectors as shipped: BaseSourceConnector ABC + Google Drive + Notion; sync engine with Redis pub/sub progress; Celery task + Beat; source CRUD API + Drive webhook; Source model webhook fields
   - 2026-06-14 | manual | marked Auth + RBAC capability as shipped; added argon2id, OAuth PKCE, AES-256-GCM, ClientIPMiddleware, audit log details
   - 2026-06-14 | manual | removed all development-stage wording + roadmap file (docs are system-only)
   - 2026-06-14 | manual | removed references to internal brainstorm + plan files (kept on local only)
@@ -48,13 +49,13 @@ Pilot audience: open-source community contributors plus engineering dev dogfoodi
 Locked from initial design sessions. Internal implementation planning is tracked privately (not part of this public repo).
 
 **Ingest:**
-- Google Drive + Notion connectors (OAuth, polling fallback at 5-min interval)
+- **Source Connectors** *(shipped)* — Google Drive + Notion via `BaseSourceConnector` ABC; OAuth (Drive) or integration token (Notion); per-source encrypted config (`config_encrypted` AES-256-GCM); polling via Celery Beat every 5 min (`SYNC_INTERVAL_MINUTES`); Drive push notifications on `POST /api/v1/webhooks/google-drive` (verifies `X-Goog-Channel-Token`, enqueues `sync_source_task(triggered_by="webhook")`); sync engine persists raw bytes to MinIO under `{type}/{source_id}/{doc_id}` and upserts `Document` row in `discovered` status; progress events published to Redis pub/sub `kg:sync:{job_id}:progress` for SSE; max 3 concurrent sync jobs per instance (`SYNC_MAX_CONCURRENT`), batch 100 docs (`SYNC_BATCH_SIZE`), skip docs over 50 MB (`MAX_DOC_SIZE_MB`); auth failure marks source `auth_failed` and pauses syncs; 5-min Beat schedule
 - Document parsers (PDF, Google Doc, Markdown, DOCX, PPTX, XLSX, TXT)
 - Chunking by heading/section/paragraph
 - Embedding (bge-m3 self-host, multilingual VI/EN/ZH) + Qdrant vector index
 - Keyword index (PostgreSQL FTS)
-- Sync job lifecycle (queued/running/completed/failed/partial)
-- Document status (active/outdated/deprecated/archived/deleted)
+- **Sync job lifecycle** *(shipped)* — `queued` → `running` → `completed` / `partial` / `failed`; `triggered_by` = `manual` / `scheduled` / `webhook`; rows in `sync_jobs` table
+- **Document status** *(shipped)* — `active` / `outdated` / `deprecated` / `archived` / `deleted`; tombstones from `list_changes(is_deleted=True)` mark `Document.status=deleted`
 
 **Retrieve + answer:**
 - Hybrid search (vector + keyword)

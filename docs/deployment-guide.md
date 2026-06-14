@@ -11,6 +11,7 @@ links:
   - "[[docs/system-architecture.md]]"
   - "[[docs/codebase-summary.md]]"
 changelog:
+  - 2026-06-14 | manual | source connectors shipped: listed SYNC_* and MAX_DOC_SIZE_MB env vars; worker + beat already in compose
   - 2026-06-14 | manual | auth shipped: bootstrap first user, magic link, OAuth; updated troubleshooting
   - 2026-06-14 | manual | documented make init, /ready, alembic troubleshooting
   - 2026-06-14 | manual | removed all development-stage wording (docs are system-only)
@@ -97,6 +98,7 @@ All env vars are listed in `.env.example` with comments. Highlights:
 
 - **Required:** `DB_*`, `REDIS_*`, `QDRANT_*`, `MINIO_*`, `JWT_*`, `KG_ENCRYPTION_KEY`.
 - **Optional (dev defaults work):** `OPENAI_API_KEY`, `GOOGLE_OAUTH_*`, `GITHUB_OAUTH_*`, `SMTP_*` (MailHog catches emails in dev).
+- **Source sync (optional, defaults work):** `SYNC_INTERVAL_MINUTES` (default 5 — Celery Beat poll cadence), `SYNC_MAX_CONCURRENT` (default 3 — max concurrent sync jobs per instance), `SYNC_BATCH_SIZE` (default 100), `MAX_DOC_SIZE_MB` (default 50 — docs above this are skipped with a warning).
 - **Atomic granularity:** never use a long connection URL — each component is split into `HOST`, `PORT`, `USER`, `PASSWORD`, `NAME`.
 
 Compose fails fast on missing required vars (`${VAR:?VAR required}`).
@@ -118,6 +120,9 @@ Run `make logs api` to see startup errors. Common causes:
 - Missing `KG_ENCRYPTION_KEY` (run `make secrets`).
 - Database not yet healthy (wait 10-20s after `make up`).
 - Stale `secrets/` directory (regenerate with `make secrets`).
+
+### Drive push notifications never arrive
+Drive `changes.watch` requires a publicly reachable HTTPS endpoint on `POST /api/v1/webhooks/google-drive`. In local dev use a tunnel (e.g. `ngrok http 8000` or `cloudflared`) and update the public URL on the source; the polling fallback every 5 min still catches changes. Production must terminate TLS in front of the API.
 
 ### OAuth fails at login
 Dev mode logs in via `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` (default `admin@knowgate.local` / `ChangeMe123!`) — no OAuth needed for first test. To enable OAuth, fill `GOOGLE_OAUTH_*` or `GITHUB_OAUTH_*` in `.env` and restart.

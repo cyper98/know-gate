@@ -10,6 +10,7 @@ links:
   - "[[docs/system-architecture.md]]"
   - "[[docs/project-overview-pdr.md]]"
 changelog:
+  - 2026-06-14 | manual | source connectors shipped: app/sources (BaseSourceConnector + Google Drive + Notion + sync engine + progress), app/tasks (Celery task + Beat schedule), app/celery_app.py, api/v1/sources.py + webhooks.py, Source model webhook fields
   - 2026-06-14 | manual | auth shipped: 6 endpoints, JWT RS256, argon2id, OAuth Google+GitHub, magic link, RBAC, audit log
   - 2026-06-14 | manual | added app/db, app/vector, app/storage, app/cache, alembic, scripts; 14 SQLAlchemy tables; init container; make init
   - 2026-06-14 | manual | removed all development-stage wording (docs are system-only)
@@ -66,18 +67,22 @@ Python 3.12, FastAPI 0.115, managed via `pyproject.toml` + `pip`/`uv`.
 | `app/audit/` | Audit log: `log.py` (`log_event()` append-only insert into `audit_log` table, best-effort non-blocking; `@audited()` decorator for service methods), `middleware.py` (`ClientIPMiddleware` + `get_client_ip()` reads `X-Forwarded-For` for audit + rate limit) |
 | `app/crypto/` | Symmetric encryption: `aes.py` (AES-256-GCM via `cryptography` lib, 12-byte nonce, nonce-prefixed output; `encrypt_str` / `decrypt_str` for at-rest secrets, key from `KG_ENCRYPTION_KEY`) |
 | `app/services/` | Cross-cutting service helpers: `email.py` (magic-link email sender via SMTP, MailHog in dev) |
-| `app/api/v1/` | API routers: `auth.py` — 6 endpoints (`/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/oauth/{provider}` + `/callback`, `/auth/magic-link` + `/verify`); Pydantic request/response schemas; role-claim JWT; audit emit on register / login / logout |
+| `app/celery_app.py` | Celery 5.4 factory; broker = Redis DB 0, backend = DB 1; `task_acks_late=True`, `prefetch_multiplier=1` (one task per worker), `task_default_max_retries=3`; eager mode flag for tests |
+| `app/sources/` | Source connector framework: `base.py` (`BaseSourceConnector` ABC + `SourceDoc` dataclass + `ConnectorAuthError` / `ConnectorRateLimitError`), `google_drive.py` (OAuth + Changes API + `changes.watch` push notifications), `notion.py` (integration token + page/block walk), `sync.py` (sync engine: load source → decrypt config → validate creds → list changes → fetch + upload to MinIO + upsert Document row + emit progress), `progress.py` (Redis pub/sub on `kg:sync:{job_id}:progress`, consumed by SSE endpoint) |
+| `app/tasks/` | Celery task entrypoints: `sync.py` — `sync_source_task` (one source; retries 3x 30s, no retry on auth error) and `sync_all_sources_task` (enqueue every ACTIVE source); `beat_schedule.py` — `sync-all-sources-every-5-min` Beat entry driven by `SYNC_INTERVAL_MINUTES` |
+| `app/api/v1/` | API routers: `auth.py` — 6 endpoints (`/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/oauth/{provider}` + `/callback`, `/auth/magic-link` + `/verify`); `sources.py` — admin CRUD + `POST /sources/{id}/sync` (manual trigger) + sync-job list/detail (`manage_sources` permission gate, returns only metadata — `config_encrypted` never exposed); `webhooks.py` — `POST /webhooks/google-drive` (verifies `X-Goog-Channel-Token`, returns 200 for initial `sync` ping, enqueues `sync_source_task` for `update`/`exists`); Pydantic request/response schemas; role-claim JWT; audit emit on register / login / logout |
 | `alembic/` | Alembic migrations (env, script template, `versions/0001_initial_schema.py`) |
 | `scripts/init.py` | Idempotent infra init: Qdrant collection + MinIO bucket + seed (run by Compose `init` container) |
 | `scripts/seed.py` | Default data: 1 admin user, 3 roles, 2 access groups, `system_settings` singleton |
 | `scripts/init_helpers.py` | Per-step init coroutines (Qdrant / MinIO / seed) |
 | `tests/test_health.py` | Smoke tests: `/health`, `/metrics`, `/api/v1` |
+| `tests/sources/` | Source-connector unit tests: `test_base.py` (ABC contract + error hierarchy), `test_google_drive.py` (token refresh + Changes pagination + 401/429/403 + tombstone), `test_notion.py` (`_TokenBucket` pacing + block-to-Markdown), `test_sync.py` (full lifecycle + partial-fail + oversized skip + auth-failed short-circuit), `test_progress.py` (publish/subscribe + bad-JSON resilience), `test_webhook.py` (sync ping + unknown channel + enqueue path) |
 | `.env` | Local env (gitignored) |
 | `.venv/` | Virtualenv (gitignored) |
 
 **Data model:** 14 PostgreSQL tables registered with `Base.metadata`. Migrations are versioned under `backend/alembic/versions/`. All models use UUID primary keys (server-side `gen_random_uuid()`) and `created_at` / `updated_at` timestamp mixins.
 
-**Currently validated:** pytest smoke pass; auth + rbac tests pass (register / login / refresh / logout / oauth / magic-link / RBAC enforcement / audit log writers); ruff/mypy configured; imports work; CORS allows `localhost:3000` and `${KG_DOMAIN}:3000`.
+**Currently validated:** pytest 94/94 pass (auth + rbac + source connectors — 6 test modules); ruff/mypy configured; imports work; CORS allows `localhost:3000` and `${KG_DOMAIN}:3000`.
 
 **Test coverage threshold:** `--cov-fail-under=80` (set in pyproject, will gate as the test suite grows).
 
@@ -185,10 +190,9 @@ Not used yet. `make cli-install` target exists for future install in editable mo
 
 ## 10. What's NOT shipped yet (planned for future)
 
-- Source Connectors: Google Drive + Notion, sync job lifecycle.
 - Ingestion Pipeline: Unstructured parser, chunker, bge-m3 embed, Qdrant upsert.
 - Retrieval + LLM: Hybrid search, reranker, query rewrite, LLM call, answer with citation.
-- REST API: ~40 routes (sources, sync-jobs, documents, RBAC, settings).
+- REST API: ~30 remaining routes (query, documents, RBAC users/groups, settings, sync-jobs SSE).
 - Frontend pages: login, dashboard, query, admin, more i18n keys.
 - CLI: Typer-based, query + admin ops.
 - Observability: OpenTelemetry, Prometheus exporters, Grafana JSON, Loki.

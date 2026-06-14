@@ -12,6 +12,7 @@ links:
   - "[[docs/codebase-summary.md]]"
   - "[[README.md]]"
 changelog:
+  - 2026-06-14 | manual | source connectors shipped: BaseSourceConnector ABC + Google Drive + Notion; sync engine with progress events; Celery worker task + Beat schedule; source CRUD API + Drive webhook handler; Source model webhook fields
   - 2026-06-14 | manual | auth shipped: 6 endpoints, JWT RS256, argon2id, OAuth Google+GitHub, magic link, RBAC, audit log
   - 2026-06-14 | manual | added init container (Alembic + Qdrant + MinIO + seed) to topology
   - 2026-06-14 | manual | removed all development-stage wording (docs are system-only)
@@ -103,7 +104,9 @@ graph TB
 
 ## 4. Data Flow
 
-**Write path (sync):** Beat → Worker polls Drive/Notion → fetch doc → save to MinIO → parse → chunk → embed (bge-m3 in worker) → upsert to Qdrant with payload (permission groups) → metadata write to PostgreSQL → status update.
+**Write path (sync):** Beat fires `sync_all_sources` (default every 5 min, configurable via `SYNC_INTERVAL_MINUTES`) → Celery worker enqueues one `sync_source_task` per ACTIVE source → sync engine (`app.sources.sync.run_sync`) loads `Source` row, decrypts `config_encrypted` (AES-256-GCM with `KG_ENCRYPTION_KEY`), builds the connector via `build_connector(source)`, validates credentials (mark source `auth_failed` on auth error), calls `list_changes(cursor)` to discover new/updated/deleted docs → for each doc: skip if `size_bytes > MAX_DOC_SIZE_MB` (default 50 MB), else `fetch_doc` → upload raw bytes to MinIO under `{type}/{source_id}/{doc_id}` → upsert `Document` row by `(source, source_id)` → publish progress event to Redis channel `kg:sync:{job_id}:progress` → mark `SyncJob` `COMPLETED` / `PARTIAL` / `FAILED` → persist next cursor. Drive push notifications land on `POST /api/v1/webhooks/google-drive`; the handler verifies `X-Goog-Channel-Token`, ignores the initial `sync` ping, and enqueues a `sync_source_task(triggered_by="webhook")` for `update` / `exists` states. The SSE endpoint `GET /api/v1/sync-jobs/{id}/stream` (planned) subscribes to the same pub/sub channel and streams JSON frames to the admin dashboard.
+
+**Parse, chunk, embed, and Qdrant upsert** are layered on top of the sync engine in a later work block (ingestion pipeline); the sync engine currently only persists the raw document in MinIO and creates the `Document` row in `discovered` status.
 
 **Read path (query):** User → API auth (JWT) → query rewrite + permission filter (`user.groups ∩ doc.groups`) → embed query (bge-m3, Redis-cached 5 min) → Qdrant hybrid search (vector + payload filter) → rerank (bge-reranker-v2-m3) → LiteLLM call (OpenAI default, Ollama fallback) → answer with citation → log to `queries` table → return.
 
@@ -155,8 +158,9 @@ Full alternatives matrix is tracked internally (see internal architecture doc).
 |-------|-----------|------|
 | Auth | `/api/v1/auth/{register,login,oauth/{google,github},magic-link,refresh,logout}` | public / user |
 | Query | `POST /api/v1/query`, `GET /api/v1/query/history`, `GET /api/v1/query/{id}`, `POST /api/v1/feedback` | user |
-| Sources | CRUD + `POST /api/v1/sources/{id}/sync` | admin |
-| Sync jobs | list / detail / retry | admin |
+| Sources | CRUD + `POST /api/v1/sources/{id}/sync` (admin only); `config_encrypted` is never returned to client | admin |
+| Sync jobs | list / detail; SSE progress stream on `/api/v1/sync-jobs/{id}/stream` | admin |
+| Webhooks | `POST /api/v1/webhooks/google-drive` (verifies `X-Goog-Channel-Token`, enqueues `sync_source_task(triggered_by="webhook")` on `update`/`exists`; ignores initial `sync` ping) | provider |
 | Documents | list / detail / patch / delete / preview | user / editor / admin |
 | RBAC | users / roles / groups CRUD + assign | admin |
 | Settings | `GET/PATCH /api/v1/settings`, `GET /api/v1/settings/audit-log` | admin |
@@ -177,7 +181,7 @@ Full alternatives matrix is tracked internally (see internal architecture doc).
 
 ## 9. Real-Time Strategy
 
-- **Sync progress (admin dashboard):** SSE on `GET /api/v1/sync-jobs/{id}/stream` — one-way push from worker logs.
+- **Sync progress (admin dashboard):** SSE on `GET /api/v1/sources/sync-jobs/{id}/stream` (route planned for the REST API work block) — one-way push from worker logs (worker publishes JSON to Redis pub/sub `kg:sync:{job_id}:progress`; API endpoint subscribes and forwards as SSE frames; events are best-effort — Redis outage does not break the sync).
 - **Query loading (user):** synchronous if < 5s, SSE for long queries.
 - **In-app notification toast:** polling every 30s (SSE later if needed).
 

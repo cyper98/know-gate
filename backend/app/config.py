@@ -118,6 +118,11 @@ class Settings(BaseSettings):
     sync_batch_size: int = 100
     max_doc_size_mb: int = 50
 
+    # === Celery ===
+    celery_broker_url: str = ""  # derived in @property below
+    celery_result_backend: str = ""  # derived in @property below
+    celery_task_always_eager: bool = False  # True only in tests (set via env)
+
     # === Query ===
     query_max_length: int = 2000
     query_summarize_threshold: int = 200
