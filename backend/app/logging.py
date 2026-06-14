@@ -27,20 +27,13 @@ def configure_logging(log_level: str = "INFO", json_output: bool = True) -> None
 
     if json_output:
         # Production: JSON to stdout
-        processors = shared_processors + [
-            structlog.processors.dict_tracebacks,
-            structlog.processors.JSONRenderer(),
-        ]
+        processors = [*shared_processors, structlog.processors.dict_tracebacks, structlog.processors.JSONRenderer()]
     else:
         # Development: pretty console output
         try:
-            processors = shared_processors + [
-                structlog.dev.ConsoleRenderer(colors=True),
-            ]
+            processors = [*shared_processors, structlog.dev.ConsoleRenderer(colors=True)]
         except ImportError:
-            processors = shared_processors + [
-                structlog.processors.JSONRenderer(),
-            ]
+            processors = [*shared_processors, structlog.processors.JSONRenderer()]
 
     structlog.configure(
         processors=processors,

@@ -378,7 +378,7 @@ async def refresh(body: RefreshRequest) -> dict:
     set for its remaining lifetime) so a stolen refresh token can only be
     used once.
     """
-    from datetime import datetime as _dt, timezone as _tz
+    from datetime import datetime as _dt
 
     try:
         claims = verify_token(body.refresh_token, expected_type="refresh")
@@ -401,7 +401,7 @@ async def refresh(body: RefreshRequest) -> dict:
     old_jti = claims.get("jti")
     old_exp = claims.get("exp")
     if old_jti and old_exp:
-        ttl = max(0, int(old_exp) - int(_dt.now(_tz.utc).timestamp()))
+        ttl = max(0, int(old_exp) - int(_dt.now(UTC).timestamp()))
         if ttl > 0:
             await revoke_jti(old_jti, ttl)
 

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class UserStatus(str, Enum):
+class UserStatus(StrEnum):
     """User account status."""
 
     ACTIVE = "active"
@@ -13,7 +13,7 @@ class UserStatus(str, Enum):
     DELETED = "deleted"  # Soft-deleted (GDPR)
 
 
-class DocumentStatus(str, Enum):
+class DocumentStatus(StrEnum):
     """Document lifecycle status (per brainstorm §6.3)."""
 
     DISCOVERED = "discovered"  # Sync found it, not yet processed
@@ -25,7 +25,7 @@ class DocumentStatus(str, Enum):
     DELETED = "deleted"  # Hard-deleted after retention period
 
 
-class SyncJobStatus(str, Enum):
+class SyncJobStatus(StrEnum):
     """Sync job lifecycle."""
 
     QUEUED = "queued"
@@ -35,14 +35,14 @@ class SyncJobStatus(str, Enum):
     PARTIAL = "partial"  # Some docs OK, some failed
 
 
-class SourceType(str, Enum):
+class SourceType(StrEnum):
     """Data source types."""
 
     GOOGLE_DRIVE = "google_drive"
     NOTION = "notion"
 
 
-class SourceStatus(str, Enum):
+class SourceStatus(StrEnum):
     """Data source connection status."""
 
     ACTIVE = "active"
@@ -51,7 +51,7 @@ class SourceStatus(str, Enum):
     ARCHIVED = "archived"  # Removed from active list (cascade archive)
 
 
-class UserQueryStatus(str, Enum):
+class UserQueryStatus(StrEnum):
     """User query lifecycle (per brainstorm §6.3)."""
 
     IN_PROGRESS = "in_progress"
@@ -61,7 +61,7 @@ class UserQueryStatus(str, Enum):
     PERMISSION_DENIED = "permission_denied"  # All chunks filtered
 
 
-class FeedbackRating(str, Enum):
+class FeedbackRating(StrEnum):
     """User feedback on query answer."""
 
     GOOD = "good"
@@ -69,7 +69,7 @@ class FeedbackRating(str, Enum):
     SOURCE_MISSING = "source_missing"
 
 
-class PermissionGrantStatus(str, Enum):
+class PermissionGrantStatus(StrEnum):
     """Permission grant lifecycle (e.g., invite acceptance)."""
 
     PENDING = "pending"

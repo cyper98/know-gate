@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
 
 from botocore.exceptions import ClientError
 
@@ -53,4 +52,4 @@ async def init_documents_bucket() -> None:
         logger.warning("minio_versioning_failed", bucket=bucket, error=str(e))
 
 
-__all__ = ["init_documents_bucket", "bucket_exists", "DOCUMENTS_BUCKET"]
+__all__ = ["DOCUMENTS_BUCKET", "bucket_exists", "init_documents_bucket"]

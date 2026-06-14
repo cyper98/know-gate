@@ -49,11 +49,11 @@ def hot_queries_key() -> str:
 
 
 __all__ = [
+    "hot_queries_key",
+    "oauth_state_key",
     "query_embed_key",
     "query_result_key",
-    "rate_limit_user_key",
     "rate_limit_ip_key",
+    "rate_limit_user_key",
     "session_jti_key",
-    "oauth_state_key",
-    "hot_queries_key",
 ]

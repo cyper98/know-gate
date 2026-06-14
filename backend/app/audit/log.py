@@ -114,7 +114,7 @@ def audited(
             # Fire-and-forget (best-effort, non-blocking)
             import asyncio
 
-            asyncio.create_task(  # noqa: RUF006 — fire-and-forget by design
+            asyncio.create_task(
                 log_event(
                     actor_id=actor_id,
                     actor_email=actor_email,

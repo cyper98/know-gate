@@ -33,7 +33,7 @@ async def init_chunks_collection(force_recreate: bool = False) -> None:
     - Payload index on `group_ids` (for fast permission filter)
     - Vector dim: 1024 (bge-m3)
     """
-    settings = get_settings()
+    get_settings()
     client = get_qdrant_client()
 
     exists = await chunks_collection_exists(client)

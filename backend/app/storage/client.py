@@ -19,9 +19,9 @@ _client: Any | None = None  # boto3 client (sync API; we'll wrap with run_in_exe
 def get_s3_client() -> Any:
     """Lazy-init boto3 S3 client pointed at MinIO.
 
-    NOTE: boto3 is sync. 
+    NOTE: boto3 is sync.
     we use sync calls in async contexts via `asyncio.to_thread`.
-    (sync engine) uses Celery (sync) so this is fine. 
+    (sync engine) uses Celery (sync) so this is fine.
     may swap to aioboto3 if needed.
     """
     global _client

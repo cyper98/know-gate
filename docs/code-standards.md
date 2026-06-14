@@ -7,8 +7,10 @@ owner: "@seang"
 tags: [code-standards, know-gate, python, typescript, docker]
 links:
   - "[[docs/system-architecture.md]]"
+  - "[[docs/api/error-codes.md]]"
   - "[[README.md]]"
 changelog:
+  - 2026-06-14 | /cook | added REST API conventions: standard error envelope (E1-E15), cursor pagination, Pydantic response_model, rate-limit middleware rules
   - 2026-06-14 | manual | added Alembic naming convention + autogenerate rule
   - 2026-06-14 | manual | removed all development-stage wording (docs are system-only)
   - 2026-06-14 | manual | removed references to internal architecture/plan files
@@ -100,7 +102,32 @@ changelog:
 - `healthcheck` on every service; dependents use `condition: service_healthy`.
 - Named volumes for data persistence; bind-mount only for source code (dev overlay).
 
-## 5. Environment Variables
+## 5. REST API Conventions
+
+**Response shape:**
+- **Success:** return the Pydantic `response_model` directly (no manual wrapping). For paginated lists use `Page[T]` so the JSON is `{ "data": [...], "meta": { "total": ..., "next_cursor": ..., "limit": ... } }`.
+- **Error:** always the standard envelope `{ "error": { "code": "E4", "message": "...", "details": { ... } } }`. Raise `api_error(status, code, message, details, headers)` from `app.api.errors`; the global exception handler does the rest. Never return a raw `HTTPException` detail.
+- **Pydantic `RequestValidationError`** is auto-mapped to E2 with `details.errors[]` (trimmed `loc` / `msg` / `type` per field).
+
+**Error codes (E1-E15):** see [[docs/api/error-codes.md|API error codes]] for the full catalog. Stable string IDs — clients branch on `code`, never on `message`. Use the most specific code (e.g. E9 `PERMISSION_DENIED_DATA` for a denied data row, not E4 `FORBIDDEN`).
+
+**Pagination:**
+- Cursor-based on every list endpoint. Accept `PageParams` via `Depends()` (`cursor`, `limit` default 20, max 100). Callers query `limit + 1` and slice; use `next_cursor_from_rows(...)` to emit the opaque cursor.
+- Never use offset pagination — unstable under concurrent inserts and forces `count(*)` scans.
+
+**Rate limit:**
+- The global `RateLimitMiddleware` (in `app/api/middleware.py`) handles coarse IP throttling (600 req/min/IP default) for all paths. Do not bypass it from new endpoints.
+- Add tighter per-endpoint sliding-window limits on the abuse-prone paths (login, query, magic-link, password reset) using `app.cache.helpers.check_*_rate_limit(...)`.
+- Webhooks (`/api/v1/webhooks/*`) are exempt from the global throttle — they sign their own requests.
+
+**OpenAPI:**
+- Declare `response_model=` on every endpoint (no manual schema files).
+- Tag every router (`tags=["..."]`); the OpenAPI customization in `app/main.py` groups them.
+- Use `HTTPBearer` (autoBearer=true) for the JWT security scheme; protected endpoints inherit it from the global setup.
+
+
+
+## 6. Environment Variables
 
 **Hard rules (from `.claude/rules/development-rules.md`):**
 - **Never** hardcode URLs, credentials, ports, or keys in source code.
@@ -112,21 +139,21 @@ changelog:
 
 **Generator helper:** `make secrets` generates JWT RS256 key pair + 32-byte base64 encryption key.
 
-## 6. File Organization
+## 7. File Organization
 
 - **Kebab-case file names** with descriptive purpose; long names are OK (self-documenting for LLMs).
 - **Module size:** keep individual code files under 200 lines; split when larger. Compose over inheritance; extract utilities; dedicated service classes for business logic.
 - **Comments:** explain *why*, not *what*. Use docstrings on public functions (Python) and JSDoc on exported functions (TS).
 - **One concept per file** when practical (e.g. one Celery task per file in `app/worker/tasks/`).
 
-## 7. Logging & Observability
+## 8. Logging & Observability
 
 - **Structured JSON logging** via `structlog` (backend) with context binding (`logger.bind(user_id=...)`).
 - **Log levels:** DEBUG for dev, INFO for prod default; never log secrets or PII.
 - **Request tracing:** OpenTelemetry span per request, propagated to DB and HTTP calls.
 - **Metrics:** Prometheus format at `/metrics` (API), custom counters/histograms for queue depth, query latency, sync progress.
 
-## 8. Security
+## 9. Security
 
 - **Passwords:** Argon2 (argon2-cffi); never log or return password hashes.
 - **JWT:** RS256, 15-min access + 30-day refresh with rotation, `jti` claim for revocation.
@@ -137,7 +164,7 @@ changelog:
 - **Input validation:** Pydantic v2 (BE) / Zod (FE) on every endpoint boundary.
 - **Secrets in `.env`:** gitignored; never commit. CI uses dummy test values.
 
-## 9. Testing
+## 10. Testing
 
 - **Unit:** pytest (BE), Vitest or jest (FE, when added).
 - **Integration:** pytest + httpx for API routes (DB mocked or testcontainers).
@@ -147,7 +174,7 @@ changelog:
 - **Test naming:** `test_*.py` files, `Test*` classes, `test_*` functions.
 - **Async tests:** `asyncio_mode = "auto"`; no `@pytest.mark.asyncio` boilerplate.
 
-## 10. Git & Commits
+## 11. Git & Commits
 
 - **Conventional commits:** `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`.
 - **No AI references** in commit messages.
@@ -155,7 +182,7 @@ changelog:
 - **Never commit secrets:** `.env`, `secrets/`, `*.pem`, `*.key` are gitignored.
 - **Pre-commit:** run `make lint` locally before pushing; CI runs full pipeline (lint + type + test + build + docker validate).
 
-## 11. CI Pipeline (`.github/workflows/ci.yml`)
+## 12. CI Pipeline (`.github/workflows/ci.yml`)
 
 Five jobs run on push to `main` and on PRs:
 
@@ -168,7 +195,7 @@ Five jobs run on push to `main` and on PRs:
 
 CI is read-only on the filesystem (no push), no auto-deploy.
 
-## 12. References
+## 13. References
 
 - Backend pyproject: `backend/pyproject.toml`
 - Frontend package: `frontend/package.json`

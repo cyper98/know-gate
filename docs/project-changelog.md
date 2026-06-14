@@ -10,7 +10,9 @@ links:
   - "[[docs/system-architecture.md]]"
   - "[[docs/codebase-summary.md]]"
   - "[[docs/project-overview-pdr.md]]"
+  - "[[docs/api/error-codes.md]]"
 changelog:
+  - 2026-06-14 | /cook | 27 new REST endpoints, 60 total routes, 292/292 tests pass
   - 2026-06-14 | manual | retrieval + LLM shipped: query embedder + hybrid search (vector + PG FTS + RRF) + bge-reranker + LLM client (with circuit breaker) + answer generator + citation builder + semantic cache + no-result handler + query pipeline orchestrator; FTS migration; 4 new API endpoints (POST /query, history, get, POST /feedback); 61 new tests, 227/227 pass
   - 2026-06-14 | manual | ingestion pipeline shipped: parser + lang_detect + chunker + bge-m3 embedder + Qdrant bulk upsert + Celery ingest tasks + sync-to-ingest wiring; 72 new tests, 166/166 pass
   - 2026-06-14 | manual | rewrote source-connectors release entry with full module + env-var + schema detail; moved above auth entry
@@ -25,6 +27,47 @@ changelog:
 > Newest entries on top. Format: `<date> | <scope> | <summary>`.
 
 ## Unreleased
+
+### feat: REST API endpoints (60 routes total)
+
+Wires the full REST surface that the architecture calls for: standard `{data, meta}` / `{error: {code, message}}` envelope, cursor pagination, data-level permission filters, rate-limit middleware, and OpenAPI tags + BearerAuth security scheme. The 27 new routes (documents, users, roles, groups, settings, sync-jobs) plus the existing 33 (auth, sources, query, feedback, webhooks) bring the total to 60 mounted under `/api/v1`.
+
+**Shared utilities (`backend/app/api/`):**
+
+- `responses.py` — `ErrorCode` enum (E1-E15), `Page[T]`, `Meta`, `ErrorResponse` Pydantic models, `ok(data, meta=None)` + `error(code, message, ...)` helpers
+- `pagination.py` — `PageParams` (default 20, max 100), `encode_cursor` / `decode_cursor` (forward-only, stable), `encode_role_cursor` / `decode_role_cursor` for permission-aware lists
+- `errors.py` — `APIError`, `api_error(code, message, details=None)`, `to_error_response(exc)` maps `HTTPException` / `RequestValidationError` / `APIError` / generic `Exception` to HTTP status + `ErrorCode`
+- `middleware.py` — `RateLimitMiddleware` (600 req/min/IP sliding window via Redis, `X-RateLimit-Limit` / `-Remaining` / `-Reset` response headers, `Retry-After` on 429, bypass for `/health`, `/metrics`, `/api/v1/webhooks/*`)
+- `v1/_permissions.py` — data-level permission helpers (`filter_documents_for_user`, `filter_groups_for_user`, `assert_can_read_user`, `assert_can_modify_role`)
+
+**Resource routers (`backend/app/api/v1/`):**
+
+| Router | Routes | Highlights |
+|--------|--------|------------|
+| `documents.py` | 5 | list (permission-filtered, cursor pagination, source/status/language/date filters), get, patch (editor+), soft delete (admin), preview (presigned MinIO URL, 5-min TTL) |
+| `users.py` | 7 | list / invite (one-time password via magic-link sender) / get / patch / soft delete (GDPR) / assign-role / revoke-role. **Last-admin guard:** cannot remove the only admin's `admin` role or delete the only admin |
+| `roles.py` | 4 | list / create / patch / delete. **Static-role block:** cannot delete `admin` / `editor` / `member`. **In-use block:** cannot delete a role held by any user |
+| `groups.py` | 7 | list (permission-filtered) / create / patch / delete, plus user-membership and document-membership add/remove. **In-use guard:** cannot delete a group with any user or document mapping |
+| `settings.py` | 3 | get / patch singleton (admin), audit-log paginated read (admin) with `?user_id=` and `?action=` filters |
+| `sync_jobs.py` | 4 | list (`?source_id=`) / get / retry (re-enqueue Celery task) / **SSE stream** (`/sync-jobs/{id}/stream` subscribes to `kg:sync:{job_id}:progress` Redis pub/sub via `app.sources.progress.subscribe_events`) |
+
+**`main.py` wiring:**
+
+- All 11 v1 routers registered under `/api/v1`
+- Exception handlers for `RequestValidationError` (422 → E1 with `details.field_errors`) and generic `Exception` (500 → E15 with sanitized message + internal `request_id`)
+- OpenAPI customization: title `"KnowGate API"`, version `"1.0.0"`, 7 tags (Auth, Sources, Documents, Query, Feedback, RBAC, Settings), `BearerAuth` security scheme (HTTPBearer, JWT)
+
+**New env vars:** `RATE_LIMIT_PER_MINUTE_PER_IP` (default 600), `RATE_LIMIT_BYPASS_PATHS` (default `/health,/metrics,/api/v1/webhooks/*`).
+
+**Tests:** 65 new API tests across 7 files (responses, users, roles, groups, documents, settings, sync_jobs). **292/292 total pass** (`pytest backend/tests/`). `ruff check` clean on all touched files.
+
+**Known follow-ups (not blockers):**
+
+- No streaming on `/query` 
+- Semantic cache still key-based
+- OpenAPI drift check not yet wired
+- SSE `/sync-jobs/{id}/stream` is open to any authenticated user — should be admin-gated to prevent cross-group leakage of source/file metadata
+- `RATE_LIMIT_LOGIN_PER_15MIN` constant exists but is not yet enforced by the middleware — login can be flooded up to the global 600/min ceiling
 
 ### feat: retrieval + LLM (query pipeline)
 

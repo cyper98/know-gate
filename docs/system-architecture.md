@@ -10,8 +10,10 @@ links:
   - "[[docs/code-standards.md]]"
   - "[[docs/deployment-guide.md]]"
   - "[[docs/codebase-summary.md]]"
+  - "[[docs/api/error-codes.md]]"
   - "[[README.md]]"
 changelog:
+  - 2026-06-14 | /cook | REST API shipped: 27 new endpoints, 60 routes total; standard error envelope `{error: {code, message, details?}}` with E1-E15 catalog; global IP-throttle middleware (RateLimitMiddleware); sync-jobs promoted to top-level namespace `/api/v1/sync-jobs`; cursor pagination; SSE sync progress stream live
   - 2026-06-14 | manual | source connectors shipped: BaseSourceConnector ABC + Google Drive + Notion; sync engine with progress events; Celery worker task + Beat schedule; source CRUD API + Drive webhook handler; Source model webhook fields
   - 2026-06-14 | manual | auth shipped: 6 endpoints, JWT RS256, argon2id, OAuth Google+GitHub, magic link, RBAC, audit log
   - 2026-06-14 | manual | added init container (Alembic + Qdrant + MinIO + seed) to topology
@@ -159,14 +161,28 @@ Full alternatives matrix is tracked internally (see internal architecture doc).
 | Auth | `/api/v1/auth/{register,login,oauth/{google,github},magic-link,refresh,logout}` | public / user |
 | Query | `POST /api/v1/query`, `GET /api/v1/query/history`, `GET /api/v1/query/{id}`, `POST /api/v1/feedback` | user |
 | Sources | CRUD + `POST /api/v1/sources/{id}/sync` (admin only); `config_encrypted` is never returned to client | admin |
-| Sync jobs | list / detail; SSE progress stream on `/api/v1/sync-jobs/{id}/stream` | admin |
+| Sync jobs | top-level namespace `/api/v1/sync-jobs` (list / detail / retry); SSE progress stream on `GET /api/v1/sync-jobs/{id}/stream` | admin |
 | Webhooks | `POST /api/v1/webhooks/google-drive` (verifies `X-Goog-Channel-Token`, enqueues `sync_source_task(triggered_by="webhook")` on `update`/`exists`; ignores initial `sync` ping) | provider |
 | Documents | list / detail / patch / delete / preview | user / editor / admin |
 | RBAC | users / roles / groups CRUD + assign | admin |
 | Settings | `GET/PATCH /api/v1/settings`, `GET /api/v1/settings/audit-log` | admin |
 | Infra | `/health` (liveness), `/ready` (4-backend parallel: PG, Qdrant, Redis, MinIO; 2s timeout each, 200 or 503), `/metrics`, `/api/v1/openapi.json` | public |
 
-~40 routes total. URL path versioned (`/api/v1/`, `/api/v2/`). OpenAPI auto-generated.
+~60 routes total (27 added: documents / RBAC CRUD / settings / audit-log / sync-job retry + SSE stream / pagination on list endpoints). URL path versioned (`/api/v1/`, `/api/v2/`). OpenAPI auto-generated; per-endpoint Pydantic `response_model=` (no manual schema files).
+
+**Error envelope (all endpoints):**
+```json
+{ "error": { "code": "E4", "message": "Permission denied", "details": { "required": "manage_sources" } } }
+```
+Stable `code` (E1-E15) for client branching; see [[docs/api/error-codes.md|API error codes]] for the full catalog (E1 INTERNAL, E2 BAD_REQUEST, E3 UNAUTHORIZED, E4 FORBIDDEN, E5 NOT_FOUND, E6 CONFLICT, E7 RATE_LIMITED, E8 SERVICE_UNAVAILABLE, E9 PERMISSION_DENIED_DATA, E10 NO_ANSWER, E11 EXTERNAL_API_ERROR, E12 INVALID_STATE, E13 QUOTA_EXCEEDED, E14 DEPRECATED, E15 UNPROCESSABLE).
+
+**Pagination:** cursor-based on every list endpoint (`Page[T]` with `meta.{total, next_cursor, limit}`); defaults `limit=20`, max `100`. Cursor is opaque base64 of `(created_at, id)` (or `(name, id)` for lexicographic sorts like roles). See `app/api/pagination.py`.
+
+**Rate limit (two layers):**
+1. **Global IP throttle** — `RateLimitMiddleware` (in `app/api/middleware.py`): 600 req/min/IP via Redis sliding window, applied before the router; bypasses `/health`, `/ready`, `/metrics`, `/api/v1` root, `/api/v1/openapi.json`, `/api/v1/docs`, `/api/v1/redoc`, and the Google Drive webhook (provider-driven). Returns 429 with `Retry-After` + `X-RateLimit-*` headers and the standard E7 envelope.
+2. **Per-endpoint sliding window** — tighter limits on the abuse-prone paths (login 5/15min, query 30/min/user, magic-link 5/hour/email) using the same Redis helper.
+
+**Exception handling:** `app/api/errors.py` exposes `to_error_response(exc)` (pure mapping) + `api_error(status, code, message, details, headers)` helper. Mounted as a FastAPI exception handler in `app/main.py` so handlers can raise `HTTPException` (or `api_error(...)`) and the global handler reshapes to the standard envelope. 4xx logged at `info`, 5xx at `error` with full traceback.
 
 ## 8. Caching Strategy
 
@@ -181,7 +197,7 @@ Full alternatives matrix is tracked internally (see internal architecture doc).
 
 ## 9. Real-Time Strategy
 
-- **Sync progress (admin dashboard):** SSE on `GET /api/v1/sources/sync-jobs/{id}/stream` (route planned for the REST API work block) — one-way push from worker logs (worker publishes JSON to Redis pub/sub `kg:sync:{job_id}:progress`; API endpoint subscribes and forwards as SSE frames; events are best-effort — Redis outage does not break the sync).
+- **Sync progress (admin dashboard):** SSE on `GET /api/v1/sync-jobs/{id}/stream` — one-way push from worker logs (worker publishes JSON to Redis pub/sub `kg:sync:{job_id}:progress`; API endpoint subscribes and forwards as SSE frames; events are best-effort — Redis outage does not break the sync).
 - **Query loading (user):** synchronous if < 5s, SSE for long queries.
 - **In-app notification toast:** polling every 30s (SSE later if needed).
 
@@ -200,4 +216,5 @@ Key ADRs established during initial design:
 - Code standards: [[docs/code-standards.md]]
 - Deployment guide: [[docs/deployment-guide.md]]
 - Codebase summary: [[docs/codebase-summary.md]]
+- API error codes: [[docs/api/error-codes.md]]
 - README: [[README.md]]

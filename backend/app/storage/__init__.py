@@ -10,13 +10,13 @@ from app.storage.uploader import (
 )
 
 __all__ = [
-    "check_minio",
-    "get_s3_client",
-    "reset_s3_client",
-    "init_documents_bucket",
     "DOCUMENTS_BUCKET",
-    "upload_doc",
+    "check_minio",
+    "delete_doc",
     "download_doc",
     "get_presigned_url",
-    "delete_doc",
+    "get_s3_client",
+    "init_documents_bucket",
+    "reset_s3_client",
+    "upload_doc",
 ]

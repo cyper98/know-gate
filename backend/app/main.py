@@ -4,20 +4,29 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 from starlette.requests import Request
 from starlette.responses import Response
 
+from app.api.errors import to_error_response
+from app.api.middleware import RateLimitMiddleware
 from app.api.v1 import auth as auth_router
+from app.api.v1 import documents as documents_router
 from app.api.v1 import feedback as feedback_router
+from app.api.v1 import groups as groups_router
 from app.api.v1 import query as query_router
+from app.api.v1 import roles as roles_router
+from app.api.v1 import settings as settings_router
 from app.api.v1 import sources as sources_router
+from app.api.v1 import sync_jobs as sync_jobs_router
+from app.api.v1 import users as users_router
 from app.api.v1 import webhooks as webhooks_router
 from app.audit.middleware import ClientIPMiddleware
 from app.cache.client import check_redis, close_redis
@@ -48,12 +57,28 @@ REQUEST_DURATION = Histogram(
 
 # CORS allowed origins (tighten per OAuth callback)
 CORS_ALLOWED_ORIGINS = [
-    f"http://localhost:3000",
+    "http://localhost:3000",
     f"http://{settings.kg_domain}:3000",
 ]
 
 # Health check timeout (per backend, per check)
 HEALTH_CHECK_TIMEOUT_SECONDS = 2.0
+
+OPENAPI_TAGS = [
+    {"name": "auth", "description": "Sign-in, sign-up, OAuth, magic links, token refresh."},
+    {"name": "query", "description": "Ask a question and get an answer with citations."},
+    {"name": "feedback", "description": "Rate past query answers (good/bad/source_missing)."},
+    {"name": "documents", "description": "List + manage indexed documents."},
+    {"name": "sources", "description": "Manage data source connections (Drive, Notion, ...)."},
+    {"name": "sync-jobs", "description": "Inspect and retry background sync jobs."},
+    {"name": "users", "description": "User management (admin only)."},
+    {"name": "roles", "description": "Role and permission management (admin only)."},
+    {"name": "groups", "description": "Access-group management (admin only)."},
+    {"name": "settings", "description": "Instance settings + audit log (admin only)."},
+    {"name": "webhooks", "description": "External push-notification receivers (e.g., Drive)."},
+    {"name": "health", "description": "Liveness, readiness, Prometheus metrics."},
+    {"name": "meta", "description": "API metadata."},
+]
 
 
 @asynccontextmanager
@@ -79,14 +104,34 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(
     title="KnowGate API",
-    description="Open-source RAG-based internal knowledge search & Q&A",
+    description=(
+        "Open-source RAG-based internal knowledge search & Q&A.\n\n"
+        "All `/api/v1/*` endpoints return JSON. Success responses are the "
+        "endpoint's Pydantic model directly; error responses follow the "
+        "envelope `{ error: { code, message, details? } }`."
+    ),
     version="0.1.0",
     openapi_url="/api/v1/openapi.json",
     docs_url="/api/v1/docs",
     redoc_url="/api/v1/redoc",
     lifespan=lifespan,
+    openapi_tags=OPENAPI_TAGS,
+    # Security schemes for the OpenAPI spec
+    components={
+        "securitySchemes": {
+            "BearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT",
+                "description": "JWT access token (RS256). 15-min TTL.",
+            },
+        }
+    },
 )
 
+# === Middleware (outermost added last) ===
+# Global IP rate limit 
+app.add_middleware(RateLimitMiddleware)
 # CORS (web origin only by default)
 app.add_middleware(
     CORSMiddleware,
@@ -99,12 +144,43 @@ app.add_middleware(
 # X-Forwarded-For is parsed correctly when behind a proxy.
 app.add_middleware(ClientIPMiddleware)
 
-# Register API routers
+# === Global error handlers ===
+# Re-shape HTTPException + RequestValidationError + unhandled into the
+# standard error envelope. Keeps endpoint code focused on business logic.
+@app.exception_handler(RequestValidationError)
+async def _validation_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    status_code, body = to_error_response(exc)
+    return JSONResponse(status_code=status_code, content=body.model_dump())
+
+
+@app.exception_handler(Exception)
+async def _unhandled_handler(request: Request, exc: Exception) -> JSONResponse:
+    # FastAPI registers its own HTTPException handler above; this catches
+    # anything else (DB errors, KeyError, RuntimeError, ...). The bare
+    # HTTPException here is a re-import to keep the check local.
+    from fastapi import HTTPException
+
+    if isinstance(exc, HTTPException):
+        status_code, body = to_error_response(exc)
+        headers = getattr(exc, "headers", None)
+        return JSONResponse(status_code=status_code, content=body.model_dump(), headers=headers)
+    status_code, body = to_error_response(exc)
+    return JSONResponse(status_code=status_code, content=body.model_dump())
+
+
+# === Register API routers ===
+# Order matters only for OpenAPI tag order in the docs UI. Auth first.
 app.include_router(auth_router.router, prefix="/api/v1")
-app.include_router(sources_router.router, prefix="/api/v1")
-app.include_router(webhooks_router.router, prefix="/api/v1")
 app.include_router(query_router.router, prefix="/api/v1")
 app.include_router(feedback_router.router, prefix="/api/v1")
+app.include_router(documents_router.router, prefix="/api/v1")
+app.include_router(sources_router.router, prefix="/api/v1")
+app.include_router(sync_jobs_router.router, prefix="/api/v1")
+app.include_router(users_router.router, prefix="/api/v1")
+app.include_router(roles_router.router, prefix="/api/v1")
+app.include_router(groups_router.router, prefix="/api/v1")
+app.include_router(settings_router.router, prefix="/api/v1")
+app.include_router(webhooks_router.router, prefix="/api/v1")
 
 
 @app.middleware("http")
@@ -131,7 +207,7 @@ async def _check_with_timeout(coro, name: str) -> dict[str, str]:
     try:
         ok = await asyncio.wait_for(coro, timeout=HEALTH_CHECK_TIMEOUT_SECONDS)
         return {"name": name, "status": "ok" if ok else "fail"}
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return {"name": name, "status": "fail", "error": "timeout"}
     except Exception as e:
         return {"name": name, "status": "fail", "error": str(e)[:200]}

@@ -10,8 +10,10 @@ links:
   - "[[docs/code-standards.md]]"
   - "[[docs/deployment-guide.md]]"
   - "[[docs/codebase-summary.md]]"
+  - "[[docs/api/error-codes.md]]"
   - "[[README.md]]"
 changelog:
+  - 2026-06-14 | /cook | marked REST API capability as shipped: 60 routes, standard error envelope (E1-E15), cursor pagination, rate-limit middleware, SSE sync progress stream
   - 2026-06-14 | manual | marked Source Connectors as shipped: BaseSourceConnector ABC + Google Drive + Notion; sync engine with Redis pub/sub progress; Celery task + Beat; source CRUD API + Drive webhook; Source model webhook fields
   - 2026-06-14 | manual | marked Auth + RBAC capability as shipped; added argon2id, OAuth PKCE, AES-256-GCM, ClientIPMiddleware, audit log details
   - 2026-06-14 | manual | removed all development-stage wording + roadmap file (docs are system-only)
@@ -79,6 +81,17 @@ Locked from initial design sessions. Internal implementation planning is tracked
 - AES-256-GCM encryption for OAuth tokens at rest (`KG_ENCRYPTION_KEY`)
 - `audit_log` table: append-only, best-effort, non-blocking writers, immutable by convention
 
+**REST API:** *(shipped)*
+- 60 routes under `/api/v1`; URL-path versioned (sibling `/api/v2/` reserved)
+- Standard response shape: success returns the Pydantic `response_model=` directly (`{ data, meta? }` for paginated lists); every error uses the envelope `{ error: { code, message, details? } }`
+- Stable error code catalog E1-E15 (full list in [[docs/api/error-codes.md|API error codes]]); E1 INTERNAL, E2 BAD_REQUEST, E3 UNAUTHORIZED, E4 FORBIDDEN, E5 NOT_FOUND, E6 CONFLICT, E7 RATE_LIMITED, E8 SERVICE_UNAVAILABLE, E9 PERMISSION_DENIED_DATA (data-level access denied), E10 NO_ANSWER, E11 EXTERNAL_API_ERROR, E12 INVALID_STATE, E13 QUOTA_EXCEEDED, E14 DEPRECATED, E15 UNPROCESSABLE
+- Cursor-based pagination on every list endpoint (`Page[T]` with `meta.{total, next_cursor, limit}`; `limit` default 20, max 100)
+- Two-layer rate limit: global IP throttle via `RateLimitMiddleware` (Redis sliding window, 600 req/min/IP, bypasses health/metrics/webhooks) + per-endpoint sliding windows on the abuse-prone paths (login, query, magic-link)
+- Global exception handler maps any `HTTPException` (and unhandled `Exception`) to the standard envelope; 4xx logged at `info`, 5xx at `error` with full traceback
+- SSE sync progress stream live at `GET /api/v1/sync-jobs/{id}/stream` (subscribes to the existing `kg:sync:{job_id}:progress` Redis pub/sub channel)
+- Sync jobs promoted to top-level namespace `/api/v1/sync-jobs` (was previously planned as `/api/v1/sources/sync-jobs`)
+- OpenAPI auto-generated; per-endpoint Pydantic `response_model=` (no manual schema files)
+
 **UX:**
 - Next.js 14 web UI + Python CLI + REST API
 - i18n UI (VI + EN, default EN)
@@ -134,4 +147,5 @@ Top three risks to track:
 - Code Standards: [[docs/code-standards.md]]
 - Deployment: [[docs/deployment-guide.md]]
 - Codebase summary: [[docs/codebase-summary.md]]
+- API error codes: [[docs/api/error-codes.md]]
 - README: [[README.md]]

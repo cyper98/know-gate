@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import BinaryIO
+from typing import Any, BinaryIO
 
 from app.config import get_settings
-from app.storage.client import get_s3_client
 from app.storage.buckets import DOCUMENTS_BUCKET
+from app.storage.client import get_s3_client
 
 logger = logging.getLogger(__name__)
 
@@ -96,8 +96,8 @@ async def delete_doc(object_key: str) -> None:
 
 
 __all__ = [
-    "upload_doc",
+    "delete_doc",
     "download_doc",
     "get_presigned_url",
-    "delete_doc",
+    "upload_doc",
 ]

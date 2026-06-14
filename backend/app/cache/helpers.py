@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Awaitable
 from typing import Any, TypeVar
 
 from app.cache.client import get_redis_client
@@ -156,21 +155,21 @@ async def get_hot_queries(top_n: int = 10) -> list[tuple[str, float]]:
 
 
 __all__ = [
+    "cache_delete",
     "cache_get_json",
     "cache_set_json",
-    "cache_delete",
     "cache_ttl",
-    "rate_limit_incr",
-    "get_query_embed",
-    "set_query_embed",
-    "get_query_result",
-    "set_query_result",
-    "check_user_rate_limit",
     "check_ip_rate_limit",
-    "revoke_jti",
-    "is_jti_revoked",
-    "set_oauth_state",
-    "pop_oauth_state",
-    "track_query",
+    "check_user_rate_limit",
     "get_hot_queries",
+    "get_query_embed",
+    "get_query_result",
+    "is_jti_revoked",
+    "pop_oauth_state",
+    "rate_limit_incr",
+    "revoke_jti",
+    "set_oauth_state",
+    "set_query_embed",
+    "set_query_result",
+    "track_query",
 ]

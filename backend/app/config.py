@@ -110,6 +110,9 @@ class Settings(BaseSettings):
     # === Rate Limits ===
     rate_limit_query_per_minute: int = 30
     rate_limit_login_per_15min: int = 5
+    # Global per-IP throttle (catches abuse before per-endpoint limits).
+    # Generous on purpose — per-endpoint limits stay tight.
+    rate_limit_global_per_minute: int = 600
 
     # === Search / Sync ===
     search_timeout_seconds: int = 10
