@@ -15,6 +15,8 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from app.api.v1 import auth as auth_router
+from app.api.v1 import feedback as feedback_router
+from app.api.v1 import query as query_router
 from app.api.v1 import sources as sources_router
 from app.api.v1 import webhooks as webhooks_router
 from app.audit.middleware import ClientIPMiddleware
@@ -101,6 +103,8 @@ app.add_middleware(ClientIPMiddleware)
 app.include_router(auth_router.router, prefix="/api/v1")
 app.include_router(sources_router.router, prefix="/api/v1")
 app.include_router(webhooks_router.router, prefix="/api/v1")
+app.include_router(query_router.router, prefix="/api/v1")
+app.include_router(feedback_router.router, prefix="/api/v1")
 
 
 @app.middleware("http")

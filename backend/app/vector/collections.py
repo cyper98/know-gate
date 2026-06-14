@@ -110,4 +110,4 @@ async def init_chunks_collection(force_recreate: bool = False) -> None:
                 logger.warning("qdrant_payload_index_failed", field=field, error=str(e))
 
 
-__all__ = ["init_chunks_collection", "chunks_collection_exists", "CHUNKS_COLLECTION"]
+__all__ = ["CHUNKS_COLLECTION", "chunks_collection_exists", "init_chunks_collection"]

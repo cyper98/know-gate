@@ -11,6 +11,8 @@ links:
   - "[[docs/codebase-summary.md]]"
   - "[[docs/project-overview-pdr.md]]"
 changelog:
+  - 2026-06-14 | manual | retrieval + LLM shipped: query embedder + hybrid search (vector + PG FTS + RRF) + bge-reranker + LLM client (with circuit breaker) + answer generator + citation builder + semantic cache + no-result handler + query pipeline orchestrator; FTS migration; 4 new API endpoints (POST /query, history, get, POST /feedback); 61 new tests, 227/227 pass
+  - 2026-06-14 | manual | ingestion pipeline shipped: parser + lang_detect + chunker + bge-m3 embedder + Qdrant bulk upsert + Celery ingest tasks + sync-to-ingest wiring; 72 new tests, 166/166 pass
   - 2026-06-14 | manual | rewrote source-connectors release entry with full module + env-var + schema detail; moved above auth entry
   - 2026-06-14 | manual | source connectors shipped: 2 connectors, sync engine, Celery, 8 admin endpoints, 40 tests; flag schema-drift
   - 2026-06-14 | manual | initial changelog with auth + rbac entry
@@ -24,7 +26,91 @@ changelog:
 
 ## Unreleased
 
-- _Nothing yet._
+### feat: retrieval + LLM (query pipeline)
+
+User-facing query path is live: cache → embed → hybrid search (vector + PG FTS + RRF) → rerank → LLM answer with numbered citations. The semantic cache, circuit-breaker fallback, and per-language no-result messages round it out.
+
+**Retrieval + LLM modules (`backend/app/retrieval/`):**
+
+- `query_embedder.py` — `embed_query_cached(text)` reuses the bge-m3 model from the ingestion pipeline; caches the result in Redis (`kg:query:embed:{sha256}`, 5 min TTL)
+- `hybrid_search.py` — `search_vector` (Qdrant cosine with `group_ids ∈ user.groups` + `status=active` filter, top-20), `search_keyword` (PG FTS on the GIN-indexed `chunks.tsv` column, joined with `document_groups` for permission filter, falls back to `ILIKE` on non-PG), `merge_rrf` (Reciprocal Rank Fusion, k=60, dedupes by `chunk_id`, marks `retrieval_source="both"`), `hydrate_text_from_db` (fills in `text` for vector-only candidates from PG), `HybridSearcher` (orchestrator class)
+- `reranker.py` — `BGEReranker` wraps `sentence_transformers.CrossEncoder(BAAI/bge-reranker-v2-m3)`, top-5 rerank; `prewarm_reranker()` worker startup hook
+- `citation_builder.py` — `Citation` dataclass (index, chunk_id, doc_id, title, section_title, page, source, url, updated_at, language, score, snippet), `build_citations` maps `[N]` tokens to full citation objects, reports out-of-range `[N]` and ignored indices
+- `answer_generator.py` — `AnswerGenerator` builds the prompt, calls the LLM (with a default `CircuitBreaker`-wired client), detects the "no answer" phrase, returns `GenerationResult` with text + citations + usage + cost
+- `no_result.py` — `NoResultReason` enum (NO_RESULTS / ALL_DENIED / EMPTY_QUERY), `build_no_result_message` returns vi/en/zh localized message + suggestions
+- `cache.py` — `SemanticCache` (24h TTL) reads/writes via the existing `app.cache.helpers.get_query_result` / `set_query_result` Redis helpers; key combines sha256(query_text) + sha256(sorted group_ids + language)
+- `pipeline.py` — `QueryPipeline.run()` end-to-end orchestrator: empty check → user load → language detect → cache check → embed → hybrid search → no-result branches → rerank → doc metadata resolve → LLM → `Query` row persist → audit log → cache set. `run_query()` module-level convenience.
+
+**LLM gateway (`backend/app/llm/`):**
+
+- `client.py` — async httpx client to the LiteLLM proxy (`/v1/chat/completions`, OpenAI-compatible). Cost estimated from a per-model price table (gpt-4o-mini, gpt-4o, ollama/llama3; unknown → 0). `aclose()` for graceful shutdown.
+- `prompts.py` — versioned system prompt (`KG_PROMPT_VERSION = "1.0.0"`, used as cache key prefix) enforcing: answer only from sources, numbered `[N]` citations, surface conflicts, no translation (D4), "no information" when sources are empty. Exports `NO_ANSWER_PHRASES` regex set (vi/en/zh) for the no-answer detector.
+- `circuit_breaker.py` — primary → fallback model state machine (CLOSED / OPEN / HALF_OPEN, `StrEnum`). Process-local singleton. Configurable threshold (default 5) + cool-down (default 60s).
+
+**FTS migration (`0003_add_chunk_fts`):**
+
+- Adds `tsv tsvector GENERATED ALWAYS AS (to_tsvector('simple', chunk_text)) STORED` column on `chunks`
+- GIN index `ix_chunks_tsv` on PG; B-tree fallback for SQLite test envs
+- `simple` config (not `english`) so vi/zh diacritics are preserved; bge-m3 vector leg covers English stemming
+
+**API endpoints (`backend/app/api/v1/`, user-gated):**
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/query` | Ask a question; returns answer + citations + warnings + latency + cost. Rate-limited per user (default 30/min) |
+| GET | `/query/history` | Caller's own past queries (paginated, newest first) |
+| GET | `/query/{id}` | One of the caller's own queries (404 on others') |
+| POST | `/feedback` | Submit rating (good/bad/source_missing) for one of the caller's queries; upserts by (query_id, user_id) |
+
+**Routers registered** in `app/main.py` under `/api/v1`.
+
+**New env vars:** none. Uses existing `LITELLM_HOST`, `LITELLM_PORT`, `LITELLM_MASTER_KEY`, `LITELLM_DEFAULT_MODEL`, `LITELLM_FALLBACK_MODEL`, `EMBEDDING_CACHE_TTL`, `RATE_LIMIT_QUERY_PER_MINUTE`.
+
+**Tests:** 61 new retrieval + LLM unit tests across 9 files. **227/227 total pass** (`pytest backend/tests/`). `ruff check` clean on all touched files.
+
+### feat: ingestion pipeline (parse + chunk + embed + index)
+
+End-to-end ingestion pipeline: documents are downloaded from MinIO, parsed with Unstructured, chunked with the heading-aware + recursive splitter, embedded with bge-m3, and bulk-upserted to Qdrant. Chunk rows are persisted in PG with the embedding model version so re-embed is always possible. The sync engine now enqueues an `ingest_doc_task` for every uploaded document; new sources are automatically indexed on the next sync.
+
+**Pipeline modules (`backend/app/pipeline/`):**
+
+- `parser.py` — Unstructured-backed `parse_bytes` / `parse_file`. Spills bytes to a temp file when a filename is provided so extension-based dispatch works. Heading depth capped at h3. Tables, lists, narrative text all collected into the current section. `EmptyDocumentError` for image-only PDFs.
+- `lang_detect.py` — `langdetect` per chunk, whitelisted to vi / en / zh (everything else → `und`). `DetectorFactory.seed = 0` for reproducibility. Short text (< 50 chars) short-circuits.
+- `tokenizer.py` — tiktoken cl100k_base with cached encoder.
+- `chunker.py` — heading-aware: each section becomes one chunk if it fits, recursive char split otherwise (paragraph → sentence → word). 10% overlap between adjacent pieces. Default 512 target / 1024 max tokens.
+- `embedder.py` — bge-m3 wrapper around sentence-transformers. Lazy thread-safe model load. `embed_batch` returns float32 `np.ndarray` (N, 1024). `aembed_batch` runs the sync call in a thread. `prewarm_embedder` is the worker startup hook. `model_version()` returns `"bge-m3-v1.0.0"` (stored in `chunks.embedding_model`).
+- `indexer.py` — `ingest_document(doc_id)` orchestrator: download → parse → chunk → embed → bulk upsert to Qdrant → upsert Chunk rows → mark Document ACTIVE. Idempotent (deterministic UUID v5 from `(doc_id, chunk_index)`). Marks FAILED on empty doc / parse error / embed error / Qdrant outage; never persists orphan chunks.
+
+**Qdrant indexer extension (`backend/app/vector/indexer.py`):**
+
+- `upsert_chunks_bulk(client, points, batch_size=500)` — batched writes for the ingest pipeline
+- `make_point_id(doc_id, chunk_index)` — public deterministic UUID v5 (re-indexed doc → same Qdrant point IDs)
+- `BULK_BATCH_SIZE = 500` constant
+
+**Celery tasks (`backend/app/tasks/ingest.py`):**
+
+- `ingest_doc_task(doc_id)` — entry point; 3 retries with 60s delay; "not found" / "already active" are no-retry cases
+- `reembed_all_task(model_version=None)` — full re-embed sweep; batches of 256 chunks to bound memory
+- `reembed_one_task(chunk_id)` — admin debug
+- `@worker_init` signal handler pre-warms the embedder in every worker process
+- `app.celery_app.include` now lists both `app.tasks.sync` and `app.tasks.ingest`
+
+**Sync engine wiring (`backend/app/sources/sync.py`):**
+
+- After a successful MinIO upload, sync engine enqueues `ingest_doc_task.delay(doc_row_id)`
+- Broker outage is best-effort: the Document row is in `DISCOVERED` and the next scheduled sync (or an admin retry) will re-enqueue
+- `_upsert_document` now returns the row id
+
+**Schema-drift fix:** Migration `0002_add_source_webhook_fields.py` adds the 4 source columns added by the source-connectors work block. Required for fresh `make up`.
+
+**Model pre-warm + load script:**
+
+- `backend/scripts/load_bge_model.py` — offline downloader for air-gapped envs (`python -m scripts.load_bge_model`)
+- Worker auto-prewarms via `worker_init` signal (no manual setup when network is available)
+
+**New env vars:** none. `EMBEDDING_MODEL_NAME`, `EMBEDDING_DIM`, `EMBEDDING_DEVICE`, `EMBEDDING_BATCH_SIZE` are the standard embedding settings (read from `app.config.Settings`).
+
+**Tests:** 72 new pipeline unit tests across 7 files (tokenizer, lang_detect, parser, chunker, embedder, vector_indexer, indexer orchestrator, ingest tasks). **166/166 total pass** (`pytest backend/tests/`). `ruff check` clean on all touched files.
 
 ## 2026-06-14
 

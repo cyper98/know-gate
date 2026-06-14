@@ -50,19 +50,23 @@ Locked from initial design sessions. Internal implementation planning is tracked
 
 **Ingest:**
 - **Source Connectors** *(shipped)* — Google Drive + Notion via `BaseSourceConnector` ABC; OAuth (Drive) or integration token (Notion); per-source encrypted config (`config_encrypted` AES-256-GCM); polling via Celery Beat every 5 min (`SYNC_INTERVAL_MINUTES`); Drive push notifications on `POST /api/v1/webhooks/google-drive` (verifies `X-Goog-Channel-Token`, enqueues `sync_source_task(triggered_by="webhook")`); sync engine persists raw bytes to MinIO under `{type}/{source_id}/{doc_id}` and upserts `Document` row in `discovered` status; progress events published to Redis pub/sub `kg:sync:{job_id}:progress` for SSE; max 3 concurrent sync jobs per instance (`SYNC_MAX_CONCURRENT`), batch 100 docs (`SYNC_BATCH_SIZE`), skip docs over 50 MB (`MAX_DOC_SIZE_MB`); auth failure marks source `auth_failed` and pauses syncs; 5-min Beat schedule
-- Document parsers (PDF, Google Doc, Markdown, DOCX, PPTX, XLSX, TXT)
-- Chunking by heading/section/paragraph
-- Embedding (bge-m3 self-host, multilingual VI/EN/ZH) + Qdrant vector index
-- Keyword index (PostgreSQL FTS)
+- **Document parsers** *(shipped)* — Unstructured-backed `parse_bytes` / `parse_file` for PDF / DOCX / PPTX / XLSX / MD / TXT / HTML; heading depth capped at h3; tables, lists, narrative text all collected into the current section; image-only PDFs raise `EmptyDocumentError`
+- **Chunking by heading/section/paragraph** *(shipped)* — `chunk_by_sections` (in `app.pipeline.chunker`); default 512 target / 1024 max tokens, 10% overlap between adjacent pieces; recursive char fallback (paragraph → sentence → word) for sections that exceed the cap
+- **Embedding (bge-m3 self-host)** *(shipped)* — `app.pipeline.embedder` wraps sentence-transformers; 1024-dim, L2-normalized, batched (default 8 on CPU, 32 on CUDA via `EMBEDDING_BATCH_SIZE`); worker pre-warms on `worker_init` signal; `model_version()` returns `bge-m3-v1.0.0` and is stored in `chunks.embedding_model`
+- **Qdrant vector index** *(shipped)* — bulk upsert (500 points / batch) into the `chunks` collection with payload `{doc_id, group_ids, language, status, chunk_index, section_title, indexed_at, source, source_id}`; deterministic UUID v5 from `(doc_id, chunk_index)` for idempotent re-index
+- **Language detection per chunk** *(shipped)* — `langdetect` whitelisted to vi / en / zh (everything else → `und`); `DetectorFactory.seed = 0` for reproducibility
+- **Ingest Celery task** *(shipped)* — `ingest_doc_task(doc_id)` runs end-to-end with 3 retries; sync engine auto-enqueues after a successful upload; `reembed_all_task` / `reembed_one_task` for model upgrades
 - **Sync job lifecycle** *(shipped)* — `queued` → `running` → `completed` / `partial` / `failed`; `triggered_by` = `manual` / `scheduled` / `webhook`; rows in `sync_jobs` table
-- **Document status** *(shipped)* — `active` / `outdated` / `deprecated` / `archived` / `deleted`; tombstones from `list_changes(is_deleted=True)` mark `Document.status=deleted`
+- **Document status** *(shipped)* — `active` / `outdated` / `deprecated` / `archived` / `deleted`; tombstones from `list_changes(is_deleted=True)` mark `Document.status=deleted`; ingest sets `active` with `indexed_at` on success, `failed` with `error_message` on empty/parse/embed/qdrant errors
 
 **Retrieve + answer:**
-- Hybrid search (vector + keyword)
-- Reranker (bge-reranker-v2-m3)
-- LLM answer generation with numbered citations
-- Query language auto-detect and user-pick
-- Answer always in source language (no translation per D4)
+- **Hybrid search (vector + keyword)** *(shipped)* — Qdrant cosine (with `group_ids ∈ user.groups` + `status=active` filters) in parallel with PostgreSQL FTS on the GIN-indexed `chunks.tsv` column; merged with Reciprocal Rank Fusion (k=60, top-20); permission filter applied at both layers + post-retrieval
+- **Reranker (bge-reranker-v2-m3)** *(shipped)* — sentence-transformers CrossEncoder; reranks top-20 to top-5; pre-warmed at worker startup
+- **LLM answer generation with numbered citations** *(shipped)* — LiteLLM proxy (gpt-4o-mini default, ollama/llama3 fallback) via a `CircuitBreaker` (5-failure threshold, 60s cool-down); prompt versioned as `KG_PROMPT_VERSION`; cost estimated per model; answer text + structured `Citation` objects (title, section, page, source provider, last_updated, presigned URL, snippet)
+- **Query language auto-detect and user-pick** *(shipped)* — `langdetect` (vi/en/zh whitelist); user pref wins
+- **Answer always in source language (no translation per D4)** *(shipped)* — the prompt explicitly forbids translation; `NO_ANSWER_PHRASES` regex detects the "no info" signal in all 3 languages
+- **Semantic cache (24h TTL)** *(shipped)* — Redis-backed; key = sha256(query_text) + sha256(sorted group_ids + language); prevents cross-user leakage
+- **No-result handler** *(shipped)* — empty index → E5 message + popular-doc suggestions; all-denied → E9 message with hidden count (no titles — leak defense)
 
 **Auth + RBAC:** *(shipped)*
 - Email/password (bootstrap) + Google/GitHub OAuth (PKCE) + magic link

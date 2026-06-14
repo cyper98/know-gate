@@ -158,7 +158,7 @@ async def seed_admin_user(
         email=admin_email,
         display_name=DEFAULT_ADMIN["display_name"],
         password_hash=_hash_password(DEFAULT_ADMIN["password"]),
-        language_pref=settings.kg_env and "en" or "en",
+        language_pref=(settings.kg_env and "en") or "en",
         status=UserStatus.ACTIVE.value,
     )
     session.add(user)

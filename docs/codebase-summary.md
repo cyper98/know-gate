@@ -190,9 +190,7 @@ Not used yet. `make cli-install` target exists for future install in editable mo
 
 ## 10. What's NOT shipped yet (planned for future)
 
-- Ingestion Pipeline: Unstructured parser, chunker, bge-m3 embed, Qdrant upsert.
-- Retrieval + LLM: Hybrid search, reranker, query rewrite, LLM call, answer with citation.
-- REST API: ~30 remaining routes (query, documents, RBAC users/groups, settings, sync-jobs SSE).
+- REST API: ~30 remaining routes (documents, RBAC users/groups, settings, sync-jobs SSE).
 - Frontend pages: login, dashboard, query, admin, more i18n keys.
 - CLI: Typer-based, query + admin ops.
 - Observability: OpenTelemetry, Prometheus exporters, Grafana JSON, Loki.

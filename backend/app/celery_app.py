@@ -34,6 +34,7 @@ def _make_celery() -> Celery:
         backend=backend,
         include=[
             "app.tasks.sync",
+            "app.tasks.ingest",
         ],
     )
     app.conf.update(

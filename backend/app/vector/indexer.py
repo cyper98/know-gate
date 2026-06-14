@@ -1,27 +1,37 @@
-"""Qdrant indexer (upsert + delete + search_stub).
-Only provides the basic CRUD surface (upsert/delete).
+"""Qdrant indexer (single + bulk upsert, delete, mark status).
+
+The ingestion pipeline calls `upsert_chunks_bulk` with hundreds of
+chunks per doc; the basic `upsert_chunk` is kept for one-off tests.
 """
 
 from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any
+from collections.abc import Sequence
 
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http import models as qmodels
 
-from app.vector.client import get_qdrant_client
 from app.vector.collections import CHUNKS_COLLECTION
 from app.vector.payload_schema import ChunkPayload, PayloadStatus
 
 logger = logging.getLogger(__name__)
+
+# How many points to send in a single Qdrant upsert call.
+# 500 is the sweet spot from the Qdrant docs for write-heavy workloads.
+BULK_BATCH_SIZE = 500
 
 
 def _make_point_id(doc_id: str, chunk_index: int) -> str:
     """Deterministic UUID v5 from (doc_id, chunk_index) — same chunk always has same Qdrant id."""
     ns = uuid.UUID("00000000-0000-0000-0000-000000000001")
     return str(uuid.uuid5(ns, f"{doc_id}:{chunk_index}"))
+
+
+def make_point_id(doc_id: str, chunk_index: int) -> str:
+    """Public alias for `_make_point_id` (the pipeline orchestrator uses this)."""
+    return _make_point_id(doc_id, chunk_index)
 
 
 async def upsert_chunk(
@@ -59,9 +69,33 @@ async def upsert_chunk(
     return point_id
 
 
+async def upsert_chunks_bulk(
+    client: AsyncQdrantClient,
+    points: Sequence[qmodels.PointStruct],
+    *,
+    batch_size: int = BULK_BATCH_SIZE,
+) -> int:
+    """Upsert many points in batches. Returns total points written.
+
+    The caller builds `PointStruct` objects; this function only does
+    the batching. Vector dimension is assumed correct (Qdrant will
+    reject mismatched dims at the first call).
+    """
+    if not points:
+        return 0
+
+    total = 0
+    for start in range(0, len(points), batch_size):
+        batch = list(points[start : start + batch_size])
+        await client.upsert(collection_name=CHUNKS_COLLECTION, points=batch)
+        total += len(batch)
+        logger.debug("qdrant_bulk_upsert_batch", batch=len(batch), cumulative=total)
+    return total
+
+
 async def delete_chunks_for_doc(client: AsyncQdrantClient, doc_id: str) -> int:
     """Delete all Qdrant points for a document. Returns count deleted."""
-    result = await client.delete(
+    await client.delete(
         collection_name=CHUNKS_COLLECTION,
         points_selector=qmodels.FilterSelector(
             filter=qmodels.Filter(
@@ -112,7 +146,10 @@ async def mark_doc_status(
 
 
 __all__ = [
-    "upsert_chunk",
+    "BULK_BATCH_SIZE",
     "delete_chunks_for_doc",
+    "make_point_id",
     "mark_doc_status",
+    "upsert_chunk",
+    "upsert_chunks_bulk",
 ]

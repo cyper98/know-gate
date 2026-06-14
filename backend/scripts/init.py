@@ -20,7 +20,6 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from app.db.session import get_session_factory
 from scripts.init_helpers import (  # noqa: E402
     init_minio_bucket,
     init_qdrant_collection,

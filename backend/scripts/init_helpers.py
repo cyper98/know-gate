@@ -3,12 +3,11 @@ heavy client modules in the alembic env, which would create circular imports).""
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
+from argon2 import PasswordHasher
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db.enums import UserStatus
@@ -16,7 +15,6 @@ from app.db.models import AccessGroup, Role, SystemSettings, User, UserGroup, Us
 from app.db.session import get_session_factory
 from app.storage.buckets import init_documents_bucket
 from app.vector.collections import init_chunks_collection
-from argon2 import PasswordHasher
 
 logger = logging.getLogger(__name__)
 _hasher = PasswordHasher()
@@ -120,7 +118,7 @@ async def seed_default_data() -> None:
                         UserRole(
                             user_id=user.id,
                             role_id=admin_role.id,
-                            granted_at=datetime.now(timezone.utc),
+                            granted_at=datetime.now(UTC),
                         )
                     )
 
@@ -135,7 +133,7 @@ async def seed_default_data() -> None:
                             UserGroup(
                                 user_id=user.id,
                                 group_id=grp.id,
-                                joined_at=datetime.now(timezone.utc),
+                                joined_at=datetime.now(UTC),
                             )
                         )
                 logger.info("seed_admin_created", email=admin_email)

@@ -160,13 +160,26 @@ async def run_sync(
             # Upload to MinIO under a namespaced key
             key = f"{source.type}/{source.id}/{doc.id}"
             await upload_doc(key, raw, content_type=current.mime_type or "application/octet-stream")
-            # Upsert Document row
-            await _upsert_document(
+            # Upsert Document row (returns the row id so we can enqueue ingest)
+            doc_row_id = await _upsert_document(
                 source_type=source.type,
                 source_row_id=source.id,
                 doc=current,
                 object_key=key,
             )
+            # Enqueue ingestion (parse + chunk + embed + index) for the worker.
+            # Done AFTER the Document row is committed so the worker can
+            # find it. Eager mode (tests) runs the task synchronously, but
+            # we still call .delay() so the contract is identical.
+            if doc_row_id:
+                try:
+                    from app.tasks.ingest import ingest_doc_task
+                    ingest_doc_task.delay(doc_row_id)
+                except Exception as e:
+                    # Broker outage should not fail the sync — the Document
+                    # row is in DISCOVERED and the next scheduled sync
+                    # (or an admin retry) will re-enqueue.
+                    logger.warning("sync_enqueue_ingest_failed", doc_id=doc_row_id, error=str(e))
             await publish_event(job_id, stage="fetch", current=idx, total=total,
                                 failed=failed, message=f"fetched {doc.title!r}",
                                 doc_id=doc.id)
@@ -270,8 +283,12 @@ async def _upsert_document(
     source_row_id: str,
     doc,  # SourceDoc
     object_key: str,
-) -> None:
-    """Upsert a Document row by (source, source_id) — see unique constraint."""
+) -> str | None:
+    """Upsert a Document row by (source, source_id) — see unique constraint.
+
+    Returns the Document row id (as a string) so the caller can enqueue
+    the ingestion task. Returns None only on an unexpected DB error.
+    """
     factory = get_session_factory()
     async with factory() as session:
         values = {
@@ -303,6 +320,16 @@ async def _upsert_document(
         )
         await session.execute(stmt)
         await session.commit()
+
+        # Re-read to get the row id (RETURNING is not supported in the
+        # upsert above because the row may have existed pre-conflict).
+        existing = await session.execute(
+            select(Document).where(
+                Document.source == source_type, Document.source_id == doc.id
+            )
+        )
+        row = existing.scalar_one_or_none()
+        return str(row.id) if row is not None else None
 
 
 async def _mark_doc_deleted(source_type: str, provider_doc_id: str) -> None:
