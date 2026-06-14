@@ -1,0 +1,23 @@
+# Files excluded from Docker build context
+**/node_modules
+**/.next
+**/out
+**/.turbo
+**/.parcel-cache
+**/.coverage
+**/coverage
+**/.env
+**/.env.local
+**/.env.*.local
+**/.git
+**/.claude
+**/README.md
+**/.gitignore
+**/.dockerignore
+**/.eslintrc.json
+**/Dockerfile.dev
+**/docker-compose*.yml
+**/tests
+**/test
+**/playwright-report
+**/test-results

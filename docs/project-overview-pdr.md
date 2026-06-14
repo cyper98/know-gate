@@ -1,0 +1,126 @@
+---
+type: project-overview-pdr
+status: draft
+created: 2026-06-14
+updated: 2026-06-14
+owner: "@seang"
+tags: [pdr, know-gate, mvp, rag]
+links:
+  - "[[docs/system-architecture.md]]"
+  - "[[docs/code-standards.md]]"
+  - "[[docs/deployment-guide.md]]"
+  - "[[docs/codebase-summary.md]]"
+  - "[[README.md]]"
+changelog:
+  - 2026-06-14 | manual | removed all development-stage wording + roadmap file (docs are system-only)
+  - 2026-06-14 | manual | removed references to internal brainstorm + plan files (kept on local only)
+  - 2026-06-14 | manual | initial PDR draft
+---
+
+# KnowGate — Project Overview & PDR
+
+> Open-source (MIT) RAG-based internal knowledge search and Q&A platform. Self-hosted per company. Multilingual (VI/EN/ZH), permission-aware, citation-backed.
+
+## 1. Problem
+
+Modern companies accumulate internal knowledge across Drive, Notion, Confluence, GitHub, Slack, and email. Employees waste time searching for the right policy, the latest pricing, the most recent spec, or the right person to ask. Generic consumer chat tools (ChatGPT, Notion AI) cannot index private data safely. Enterprise search (Glean, Confluence AI) lock customers into vendor stacks and US-based data processing, which is a non-starter for many regulated teams.
+
+KnowGate closes that gap: a self-hostable, open-source, multilingual RAG platform that respects existing permission boundaries (user → access group → document) and surfaces answers with citations the user can verify.
+
+## 2. Users
+
+Six user types identified from initial design sessions:
+
+| User Type | Primary Need |
+|-----------|--------------|
+| Nhân viên mới (new hire) | Find onboarding docs, policies, processes quickly |
+| Support / Customer Success | Look up CS policies, ticket history, FAQs |
+| Sales | Find current pricing, case studies, decks by region |
+| Engineering / Product | Find technical docs, past design decisions, RFCs, specs |
+| Legal / Finance / HR / Ops | Find official policies, approval workflows, contracts |
+| Ban quản lý (governance) | Dashboard of stale, missing, or bottleneck knowledge |
+
+Pilot audience: open-source community contributors plus engineering dev dogfooding during the build.
+
+## 3. MVP Scope (P0)
+
+Locked from initial design sessions. Internal implementation planning is tracked privately (not part of this public repo).
+
+**Ingest:**
+- Google Drive + Notion connectors (OAuth, polling fallback at 5-min interval)
+- Document parsers (PDF, Google Doc, Markdown, DOCX, PPTX, XLSX, TXT)
+- Chunking by heading/section/paragraph
+- Embedding (bge-m3 self-host, multilingual VI/EN/ZH) + Qdrant vector index
+- Keyword index (PostgreSQL FTS)
+- Sync job lifecycle (queued/running/completed/failed/partial)
+- Document status (active/outdated/deprecated/archived/deleted)
+
+**Retrieve + answer:**
+- Hybrid search (vector + keyword)
+- Reranker (bge-reranker-v2-m3)
+- LLM answer generation with numbered citations
+- Query language auto-detect and user-pick
+- Answer always in source language (no translation per D4)
+
+**Auth + RBAC:**
+- Email/password (bootstrap) + Google/GitHub OAuth + magic link
+- JWT (RS256, 15-min access + 30-day refresh with rotation)
+- Flat 3-role model: admin / editor / member
+- Access group model (user → group, doc → group, AND-logic permission filter)
+
+**UX:**
+- Next.js 14 web UI + Python CLI + REST API
+- i18n UI (VI + EN, default EN)
+- Feedback button (good / bad / source-missing)
+- Admin dashboard: sync log, user mgmt, permission config, query log
+- Audit log for permission changes (immutable)
+
+## 4. Non-Goals (MVP)
+
+- Confluence / GitHub / Jira / Slack / Email connectors (P2)
+- Cross-language answer translation (removed per brainstorm D4)
+- Nested role hierarchy (flat 3-role only per OQ-7)
+- AI agent auto-suggesting doc updates (P2)
+- Model router / cost governance dashboard (P2)
+- PII detection and redaction (P2)
+- Browser extension / VS Code plugin (P2)
+
+## 5. Success Criteria
+
+From initial design sessions. Final lock happens during business requirements sign-off.
+
+| Metric | Target |
+|--------|--------|
+| Adoption | ≥ 10 self-hosted production instances in first 6 months |
+| Retrieval quality | Top-5 retrieval accuracy ≥ 80% on pilot eval dataset |
+| Latency | P95 query < 5s with self-hosted LLM, < 3s with cloud LLM |
+| User satisfaction | Feedback rating ≥ 70% "good" |
+| Coverage | 90% of pilot docs indexed successfully |
+| Performance | ≥ 100 concurrent users per instance |
+| Community | ≥ 5 external contributors in first 6 months |
+
+## 6. Constraints & Assumptions
+
+- **License:** MIT, open-source.
+- **Hosting model:** self-hosted per company, single binary or docker-compose install.
+- **Pilot team size:** 1 dev full-time → ~4 weeks to MVP demo; 2-3 devs parallel → ~2 weeks.
+- **LLM provider:** OpenAI default (gpt-4o-mini) via LiteLLM proxy, optional Ollama self-host fallback.
+- **Embedding:** bge-m3 self-hosted, free, multilingual (no per-token cost).
+- **Permission invariant:** chunks only pass to LLM if `user.groups ∩ doc.groups` is non-empty (defense in depth at 3 layers: API filter, Qdrant payload filter, post-retrieval check).
+- **Multilingual scope:** minimum VI + EN, ZH if bge-m3 quality allows.
+
+## 7. Risks
+
+Top three risks to track:
+
+- **R1 (Adoption):** open-source RAG competes with Notion AI, Confluence AI, Glean — pivot on self-host + open source + VI/EN/ZH multilingual.
+- **R3 (Permission misconfig):** data leak risk. Mitigate with permission templates, dry-run mode, audit log, admin training doc.
+- **R5 (Scope creep):** 5 flows × 2 connectors × full RBAC × i18n is a lot. Prioritize F3 (user query) first; cut F4 detail; defer Slack share to P1.
+
+## 8. Related Documents
+
+- Architecture: [[docs/system-architecture.md]]
+- Code Standards: [[docs/code-standards.md]]
+- Deployment: [[docs/deployment-guide.md]]
+- Codebase summary: [[docs/codebase-summary.md]]
+- README: [[README.md]]

@@ -1,0 +1,41 @@
+name: knowgate
+
+# Dev overrides: hot-reload, source mounts, debug ports
+
+services:
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+      target: runtime
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--log-level", "debug"]
+    volumes:
+      - ../backend/app:/app/app:ro
+      - ../secrets:/app/secrets:ro
+    environment:
+      KG_LOG_LEVEL: DEBUG
+
+  worker:
+    command: ["celery", "-A", "app.worker.celery_app", "worker", "--loglevel=DEBUG", "--concurrency=2", "--reload"]
+    volumes:
+      - ../backend/app:/app/app:ro
+      - ../secrets:/app/secrets:ro
+
+  beat:
+    command: ["celery", "-A", "app.worker.celery_app", "beat", "--loglevel=DEBUG"]
+    volumes:
+      - ../backend/app:/app/app:ro
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      target: builder
+    command: ["npm", "run", "dev"]
+    volumes:
+      - ../frontend/app:/app/app:ro
+      - ../frontend/components:/app/components:ro
+      - ../frontend/lib:/app/lib:ro
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost:8000

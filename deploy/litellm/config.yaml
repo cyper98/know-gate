@@ -1,0 +1,33 @@
+model_list:
+  - model_name: gpt-4o-mini
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+      api_base: os.environ/OPENAI_BASE_URL
+
+  - model_name: ollama/llama3
+    litellm_params:
+      model: ollama/llama3
+      api_base: os.environ/OLLAMA_BASE_URL
+
+router_settings:
+  # Default model
+  default_model: gpt-4o-mini
+  # Enable fallbacks (OpenAI -> Ollama on error)
+  enable_fallbacks: true
+  fallback_models:
+    - ollama/llama3
+
+litellm_settings:
+  # Drop requests that exceed TPM limits
+  drop_params: true
+  # Set request timeout (seconds)
+  request_timeout: 30
+  # Set telemetry to disabled
+  telemetry: false
+
+general_settings:
+  # Master key for admin access
+  master_key: os.environ/LITELLM_MASTER_KEY
+  # Disable telemetry
+  telemetry: false

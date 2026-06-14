@@ -1,0 +1,64 @@
+{
+  "home": {
+    "title": "KnowGate",
+    "subtitle": "Open-source internal knowledge search & Q&A. Multilingual. Permission-aware.",
+    "signIn": "Sign in",
+    "viewSource": "View on GitHub",
+    "footer": "MIT License · v0.1.0"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Something went wrong",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "search": "Search",
+    "back": "Back",
+    "next": "Next",
+    "submit": "Submit"
+  },
+  "auth": {
+    "loginTitle": "Sign in to KnowGate",
+    "loginSubtitle": "Choose a method to sign in",
+    "emailPlaceholder": "you@company.com",
+    "passwordPlaceholder": "Password",
+    "signInWithEmail": "Sign in with email",
+    "signInWithGoogle": "Sign in with Google",
+    "signInWithGithub": "Sign in with GitHub",
+    "requestMagicLink": "Email me a magic link",
+    "magicLinkSent": "Magic link sent. Check your inbox.",
+    "noAccount": "Don't have an account? Contact your admin."
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "query": "Ask a question",
+    "history": "History",
+    "admin": "Admin",
+    "sources": "Sources",
+    "users": "Users",
+    "roles": "Roles",
+    "groups": "Groups",
+    "settings": "Settings",
+    "auditLog": "Audit log",
+    "logout": "Sign out"
+  },
+  "query": {
+    "placeholder": "Ask a question about your team's knowledge...",
+    "searching": "Searching in {count} documents...",
+    "noResult": "I couldn't find any documents related to your question.",
+    "noResultHint": "Try different keywords or ask your admin to add more documents to the system.",
+    "permissionDenied": "There are {count} results, but you don't have permission to view them.",
+    "basedOnN": "Answer based on {count} sources.",
+    "feedbackGood": "Helpful",
+    "feedbackBad": "Not helpful",
+    "feedbackMissing": "Missing source",
+    "shareToSlack": "Share to Slack",
+    "copyLink": "Copy link",
+    "bookmark": "Bookmark",
+    "openInDrive": "Open in Drive",
+    "openInNotion": "Open in Notion"
+  }
+}

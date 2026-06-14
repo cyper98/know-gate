@@ -1,0 +1,64 @@
+{
+  "home": {
+    "title": "KnowGate",
+    "subtitle": "Hệ thống tìm kiếm & hỏi đáp tri thức nội bộ mã nguồn mở. Đa ngôn ngữ. Tôn trọng quyền truy cập.",
+    "signIn": "Đăng nhập",
+    "viewSource": "Xem trên GitHub",
+    "footer": "Giấy phép MIT · v0.1.0"
+  },
+  "common": {
+    "loading": "Đang tải...",
+    "error": "Đã xảy ra lỗi",
+    "retry": "Thử lại",
+    "cancel": "Huỷ",
+    "save": "Lưu",
+    "delete": "Xoá",
+    "edit": "Sửa",
+    "create": "Tạo",
+    "search": "Tìm kiếm",
+    "back": "Quay lại",
+    "next": "Tiếp",
+    "submit": "Gửi"
+  },
+  "auth": {
+    "loginTitle": "Đăng nhập vào KnowGate",
+    "loginSubtitle": "Chọn phương thức đăng nhập",
+    "emailPlaceholder": "ban@congty.com",
+    "passwordPlaceholder": "Mật khẩu",
+    "signInWithEmail": "Đăng nhập bằng email",
+    "signInWithGoogle": "Đăng nhập bằng Google",
+    "signInWithGithub": "Đăng nhập bằng GitHub",
+    "requestMagicLink": "Gửi magic link qua email",
+    "magicLinkSent": "Magic link đã gửi. Kiểm tra hộp thư.",
+    "noAccount": "Chưa có tài khoản? Liên hệ admin."
+  },
+  "nav": {
+    "dashboard": "Trang chủ",
+    "query": "Đặt câu hỏi",
+    "history": "Lịch sử",
+    "admin": "Quản trị",
+    "sources": "Nguồn dữ liệu",
+    "users": "Người dùng",
+    "roles": "Vai trò",
+    "groups": "Nhóm",
+    "settings": "Cài đặt",
+    "auditLog": "Nhật ký",
+    "logout": "Đăng xuất"
+  },
+  "query": {
+    "placeholder": "Đặt câu hỏi về tri thức trong team của bạn...",
+    "searching": "Đang tìm trong {count} tài liệu...",
+    "noResult": "Tôi không tìm thấy tài liệu liên quan đến câu hỏi của bạn.",
+    "noResultHint": "Thử từ khoá khác hoặc nhờ admin thêm tài liệu vào hệ thống.",
+    "permissionDenied": "Có {count} kết quả, nhưng bạn không có quyền xem.",
+    "basedOnN": "Câu trả lời dựa trên {count} nguồn.",
+    "feedbackGood": "Hữu ích",
+    "feedbackBad": "Không hữu ích",
+    "feedbackMissing": "Thiếu nguồn",
+    "shareToSlack": "Chia sẻ qua Slack",
+    "copyLink": "Sao chép liên kết",
+    "bookmark": "Đánh dấu",
+    "openInDrive": "Mở trong Drive",
+    "openInNotion": "Mở trong Notion"
+  }
+}
