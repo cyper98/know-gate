@@ -12,6 +12,7 @@ links:
   - "[[docs/project-overview-pdr.md]]"
   - "[[docs/api/error-codes.md]]"
 changelog:
+  - 2026-06-15 | manual | frontend shipped (53 files: lib, components, app routes, middleware); i18n en/vi; 15 routes; full release note deferred to release
   - 2026-06-14 | /cook | 27 new REST endpoints, 60 total routes, 292/292 tests pass
   - 2026-06-14 | manual | retrieval + LLM shipped: query embedder + hybrid search (vector + PG FTS + RRF) + bge-reranker + LLM client (with circuit breaker) + answer generator + citation builder + semantic cache + no-result handler + query pipeline orchestrator; FTS migration; 4 new API endpoints (POST /query, history, get, POST /feedback); 61 new tests, 227/227 pass
   - 2026-06-14 | manual | ingestion pipeline shipped: parser + lang_detect + chunker + bge-m3 embedder + Qdrant bulk upsert + Celery ingest tasks + sync-to-ingest wiring; 72 new tests, 166/166 pass
@@ -27,6 +28,10 @@ changelog:
 > Newest entries on top. Format: `<date> | <scope> | <summary>`.
 
 ## Unreleased
+
+### feat: frontend (Next.js 14) — 53 files
+
+Auth-gated UI covering login, magic-link verify, dashboard, query (with citations + feedback), query history, and full admin (sources, users, roles, groups, settings, audit-log). Server-side `UserProvider` + `RoleGate` enforce RBAC at render time; `middleware.ts` redirects unauth users to `/{locale}/login` with a preserved `callbackUrl`. i18n via `next-intl` covers `home, common, auth, nav, query, dashboard, admin.{sources,users,roles,groups,settings,audit}, errors, toast, empty` in both en + vi. `next build` green, 15 routes, 87-122 kB First Load JS per route. Full release note deferred to release.
 
 ### feat: REST API endpoints (60 routes total)
 

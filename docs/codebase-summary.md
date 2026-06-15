@@ -11,6 +11,7 @@ links:
   - "[[docs/project-overview-pdr.md]]"
   - "[[docs/api/error-codes.md]]"
 changelog:
+  - 2026-06-15 | manual | frontend shipped: 53 files (lib, components, app), i18n en/vi, middleware auth gate, server actions, 15 routes, 87-122 kB First Load JS
   - 2026-06-14 | /cook | REST API shipped: 60 routes under /api/v1 (RBAC, settings, audit-log, sync-job retry + SSE stream, cursor pagination); app/api/{responses.py, errors.py, middleware.py (RateLimitMiddleware), pagination.py}; standard error envelope (E1-E15)
   - 2026-06-14 | manual | source connectors shipped: app/sources (BaseSourceConnector + Google Drive + Notion + sync engine + progress), app/tasks (Celery task + Beat schedule), app/celery_app.py, api/v1/sources.py + webhooks.py, Source model webhook fields
   - 2026-06-14 | manual | auth shipped: 6 endpoints, JWT RS256, argon2id, OAuth Google+GitHub, magic link, RBAC, audit log
@@ -92,7 +93,7 @@ Python 3.12, FastAPI 0.115, managed via `pyproject.toml` + `pip`/`uv`.
 
 ## 3. Frontend (`frontend/`)
 
-Next.js 14.2 App Router, TypeScript 5.6 strict, Tailwind, shadcn/ui patterns, i18n via `next-intl`.
+Next.js 14.2 App Router, TypeScript 5.6 strict, Tailwind, shadcn/ui patterns, i18n via `next-intl`. 53 source files total.
 
 | File | Purpose |
 |------|---------|
@@ -103,18 +104,69 @@ Next.js 14.2 App Router, TypeScript 5.6 strict, Tailwind, shadcn/ui patterns, i1
 | `postcss.config.mjs` | PostCSS pipeline for Tailwind |
 | `.eslintrc.json` | ESLint + `eslint-config-next` |
 | `Dockerfile` | Multi-stage: deps → builder → runner (non-root UID 1001, standalone output, healthcheck) |
+| `middleware.ts` | Next middleware: auth gate (redirects unauth users to `/{locale}/login`, preserves callback URL) + i18n locale prefix enforcement |
 | `app/layout.tsx` | Root layout with `NextIntlClientProvider`, locale from server |
-| `app/page.tsx` | Landing page with i18n keys (home.title, home.subtitle, etc.) |
+| `app/page.tsx` | Root redirect: signed-in users → `/dashboard`, others → `/{locale}/login` |
 | `app/globals.css` | Tailwind base + CSS vars |
+| `app/(auth)/layout.tsx` | Auth-shell layout (centered card, no app chrome) |
+| `app/(auth)/login/page.tsx` | Email/password + OAuth (Google/GitHub) + magic-link send, with locale-aware redirect |
+| `app/(auth)/login/login-form.tsx` | Client form: validation, error toast, pending state |
+| `app/(auth)/magic-link/verify/page.tsx` | Magic-link token consume (server action), issues JWT pair, redirects to dashboard |
+| `app/(auth)/magic-link/verify/magic-verify.tsx` | Client wrapper for the verify flow with status states |
+| `app/(app)/layout.tsx` | Auth-gated app shell: sidebar (AppShell) + topbar (LangSwitcher + user menu), requires `UserProvider` |
+| `app/(app)/dashboard/page.tsx` | Dashboard widgets: recent queries, active sources, quick actions |
+| `app/(app)/dashboard/dashboard-widgets.tsx` | Widget composition (server + client split) |
+| `app/(app)/query/page.tsx` | Query workspace: input → answer + citations + feedback buttons + filter sidebar |
+| `app/(app)/query/query-workspace.tsx` | TanStack-Query-driven search/answer flow with streaming-friendly state |
+| `app/(app)/query/history/page.tsx` | Caller's past queries (paginated, newest first) |
+| `app/(app)/query/history/history-list.tsx` | History list with expand-to-citations |
+| `app/(app)/admin/sources/page.tsx` | Sources list + create/edit dialog (admin only) |
+| `app/(app)/admin/sources/sources-table.tsx` | Sources table with sync-trigger action |
+| `app/(app)/admin/users/page.tsx` | Users list + invite + role-assign (admin only) |
+| `app/(app)/admin/users/users-table.tsx` | Users table with role pills and last-admin guard |
+| `app/(app)/admin/roles/page.tsx` | Roles list + CRUD (admin only; static-role + in-use blocks) |
+| `app/(app)/admin/roles/roles-table.tsx` | Roles table with permission preview |
+| `app/(app)/admin/groups/page.tsx` | Access groups list + user/document membership (admin only) |
+| `app/(app)/admin/groups/groups-table.tsx` | Groups table with member counts |
+| `app/(app)/admin/settings/page.tsx` | Singleton system settings editor (admin only) |
+| `app/(app)/admin/settings/settings-view.tsx` | Settings form with audit-log link |
+| `app/(app)/admin/audit-log/page.tsx` | Paginated audit log with `?user_id=` / `?action=` filters (admin only) |
+| `app/(app)/admin/audit-log/audit-list.tsx` | Audit log list component |
+| `components/ui/button.tsx` | shadcn/ui Button (variants: default / outline / ghost / destructive) |
+| `components/ui/input.tsx` | shadcn/ui Input |
+| `components/ui/label.tsx` | shadcn/ui Label |
+| `components/ui/card.tsx` | shadcn/ui Card (Header / Title / Description / Content / Footer) |
+| `components/ui/badge.tsx` | shadcn/ui Badge (variants for role/status) |
+| `components/ui/skeleton.tsx` | shadcn/ui Skeleton (loading placeholders) |
+| `components/ui/separator.tsx` | shadcn/ui Separator |
+| `components/ui/alert.tsx` | shadcn/ui Alert (default / destructive variants) |
+| `components/ui/dialog.tsx` | shadcn/ui Dialog (modal shell, used by admin CRUD forms) |
+| `components/citation-card.tsx` | Per-citation card: title, section, page, source link, snippet |
+| `components/feedback-buttons.tsx` | Good / bad / source-missing feedback for a query |
+| `components/filter-sidebar.tsx` | Source / language / date filters for query page |
+| `components/lang-switcher.tsx` | Locale switch (preserves current path) |
+| `components/empty-state.tsx` | Reusable empty state with icon + title + description |
+| `components/app-shell.tsx` | Sidebar nav (per role) + topbar (lang switcher + user menu) |
+| `components/user-provider.tsx` | Server-side user context (decoded JWT + permissions) for client trees |
+| `components/role-gate.tsx` | Client-side permission guard (renders children only if user has required permission) |
+| `lib/api.ts` | Public barrel: re-exports `api-client.ts` + `api-types.ts` |
+| `lib/api-client.ts` | Typed fetch wrapper: base URL, JWT injection, error envelope (E1-E15) handling, zod-validated responses, TanStack-Query helpers |
+| `lib/api-types.ts` | Shared TypeScript types for API requests/responses (users, sources, queries, settings, etc.) |
+| `lib/auth.ts` | Server-side auth helpers: get current user from cookies, permission check |
+| `lib/auth-actions.ts` | Server actions: login, logout, refresh, magic-link verify |
+| `lib/auth-cookies.ts` | HttpOnly cookie helpers (access + refresh JWT, secure flags, SameSite=Lax) |
+| `lib/utils.ts` | `cn()` className merger (clsx + tailwind-merge) + misc formatters |
 | `i18n/config.ts` | `next-intl` config (locales, default) |
 | `i18n/request.ts` | Locale request handler for server components |
-| `messages/en.json` | English strings (home, common, auth, nav, query) |
-| `messages/vi.json` | Vietnamese strings (full mirror of en.json) |
-| `components/` | Empty stub (components added as the frontend grows) |
-| `lib/` | Empty stub (lib code added as the frontend grows) |
+| `messages/en.json` | English strings — top-level keys: `home, common, auth, nav, query, dashboard, admin.{sources,users,roles,groups,settings,audit}, errors, toast, empty` |
+| `messages/vi.json` | Vietnamese strings — full mirror of en.json (same key shape) |
 | `public/` | Static assets |
 
-**i18n scope:** VI + EN, default EN per D12. All user-facing strings localized (home, common, auth, nav, query sections).
+**i18n scope:** VI + EN, default EN per D12. All user-facing strings localized across `home` (5), `common` (43), `auth` (19), `nav` (14), `query` (33), `dashboard` (10), `admin` (7 groups: sources, users, roles, groups, settings, settings, audit), `errors` (17), `toast` (8), `empty` (2). `en.json` and `vi.json` share identical key structure.
+
+**Auth model:** HttpOnly secure cookies (access 15 min + refresh 30 days), same `RS256` JWT shape as the backend. `middleware.ts` runs on every non-static request, verifies access-token expiry (without DB hit), and rewrites the URL to `/{locale}/login?callbackUrl=...` on miss. Refresh handled by server actions on the server tree.
+
+**Build output:** 15 routes, First Load JS 87-122 kB per route, ESLint + `tsc --noEmit` clean, `next build` green.
 
 ## 4. CLI (`cli/`)
 
@@ -195,7 +247,6 @@ Not used yet. `make cli-install` target exists for future install in editable mo
 
 ## 10. What's NOT shipped yet (planned for future)
 
-- Frontend pages: login, dashboard, query, admin, more i18n keys.
 - CLI: Typer-based, query + admin ops.
 - Observability: OpenTelemetry, Prometheus exporters, Grafana JSON, Loki.
 - Helm chart: K8s production deploy.
