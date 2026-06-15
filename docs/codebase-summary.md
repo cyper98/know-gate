@@ -2,7 +2,7 @@
 type: codebase-summary
 status: draft
 created: 2026-06-14
-updated: 2026-06-14
+updated: 2026-06-15
 owner: "@seang"
 tags: [codebase-summary, know-gate, monorepo]
 links:
@@ -11,6 +11,7 @@ links:
   - "[[docs/project-overview-pdr.md]]"
   - "[[docs/api/error-codes.md]]"
 changelog:
+  - 2026-06-15 | manual | CLI shipped: Typer + httpx + rich + keyring; 9 modules, 78 tests, exit code mapping (0-5), 6 sub-commands (auth/query/source/user/config), keyring sidecar for multi-account, refresh-on-401 with bounded retry, JSON mode via --json; CI jobs added (cli-lint + cli-test)
   - 2026-06-15 | manual | frontend shipped: 53 files (lib, components, app), i18n en/vi, middleware auth gate, server actions, 15 routes, 87-122 kB First Load JS
   - 2026-06-14 | /cook | REST API shipped: 60 routes under /api/v1 (RBAC, settings, audit-log, sync-job retry + SSE stream, cursor pagination); app/api/{responses.py, errors.py, middleware.py (RateLimitMiddleware), pagination.py}; standard error envelope (E1-E15)
   - 2026-06-14 | manual | source connectors shipped: app/sources (BaseSourceConnector + Google Drive + Notion + sync engine + progress), app/tasks (Celery task + Beat schedule), app/celery_app.py, api/v1/sources.py + webhooks.py, Source model webhook fields
@@ -170,12 +171,37 @@ Next.js 14.2 App Router, TypeScript 5.6 strict, Tailwind, shadcn/ui patterns, i1
 
 ## 4. CLI (`cli/`)
 
-Placeholder for the CLI (Typer-based, to be added). Currently:
+Python 3.12, Typer 0.12, distributed as an installable package via `pip install -e .` in `cli/`. Entry point: `kg = "knowgate_cli.main:app"`.
 
-- `cli/knowgate_cli/` — package skeleton.
-- `cli/tests/` — placeholder.
+| File / dir | Purpose |
+|------------|---------|
+| `pyproject.toml` | Deps: typer, httpx, pydantic, rich, keyring, tomli-w, respx (dev). Hatchling build, `kg` console script. |
+| `Dockerfile` | (not yet — defer to follow-up) |
+| `knowgate_cli/__init__.py` | `__version__ = "0.1.0"` |
+| `knowgate_cli/main.py` | Typer app, sub-commands, global options (`--api-url`, `--json`, `--verbose`); per-subcommand `try/except CLIError → typer.Exit(code=...)` mapping |
+| `knowgate_cli/client.py` | Sync `httpx.Client` wrapper; refresh-on-401 (one retry); error envelope `{"error": {"code", "message"}}` → `CLIError(exit_code=...)` per E1-E15 |
+| `knowgate_cli/config.py` | TOML config at `~/.config/knowgate/config.toml`; keys `api_url`/`default_language`/`output_format`; atomic write via temp-file + rename |
+| `knowgate_cli/output.py` | Rich + JSON mode; auto-detects TTY for `color`/`is_interactive`; `Output(json_mode=True)` short-circuits human output to a single JSON envelope |
+| `knowgate_cli/auth.py` | `kg auth login/logout/status`; system keyring for tokens (`SERVICE_NAME="knowgate-cli"`, account key = `<api-url-hash>:<email>`); sidecar `credential_index.json` for `--all` logout without OS-level keyring enumeration |
+| `knowgate_cli/query.py` | `kg query "..."`; supports positional / `--file` / `--stdin`; default human output is a Rich panel + citation table; `--json` echoes raw body |
+| `knowgate_cli/source.py` | `kg source list/show/create/sync/delete`; interactive `create` (OAuth JSON for Drive, integration token for Notion) or file-driven `--from-file` |
+| `knowgate_cli/user.py` | `kg user list/show/invite/delete` + nested `kg user role add/remove`; invite returns the one-time plaintext password in human mode (with share-securely warning) and as JSON in `--json` mode |
+| `tests/conftest.py` | `isolated_config_dir` (per-test tmp `KNOWGATE_CONFIG_DIR`), `client` (no-creds), `mock_http` (respx transport) |
+| `tests/test_config.py` (8) | defaults, persistence, atomic write, malformed TOML |
+| `tests/test_client.py` (18) | exit-code mapping, envelope → `CLIError`, 204/2xx, auth-header injection, refresh-on-401, refresh-failure-stops-retry |
+| `tests/test_auth.py` (10) | JSON round-trip, corrupt-entry cleanup, login flow, logout single + all, status while logged-in/out |
+| `tests/test_query.py` (11) | question input resolution, POST payload, error propagation, no-result handling |
+| `tests/test_source.py` (10) | list / show / sync / delete (with/without `--yes`), create from file (Drive + Notion), source-type validation |
+| `tests/test_user.py` (8) | list (with filters), show, invite payload, role add (incl. noop), role remove |
+| `tests/test_main.py` (13) | end-to-end via `CliRunner`: help, version, config get/set, query 0/2/4/1 exit codes, source list, user list |
 
-Not used yet. `make cli-install` target exists for future install in editable mode.
+**Sub-commands at a glance:** `kg auth {login,logout,status}` · `kg query [QUESTION]` · `kg config {list,get,set}` · `kg source {list,show,create,sync,delete}` · `kg user {list,show,invite,delete}` · `kg user role {add,remove}`.
+
+**Exit codes (stable):** 0 success · 1 auth (401) · 2 not-found / usage (404 + bad arg) · 3 forbidden (403) · 4 rate-limited (429) · 5 generic (network, server error, unhandled).
+
+**Auth model:** JWT pair in system keyring under `knowgate-cli` service. Multi-account via API-URL-hashed account key + sidecar `credential_index.json` (keyring has no portable "list all" API). Refresh handled by client on 401 (one retry).
+
+**Test coverage:** 78/78 pass in ~0.5s; `ruff check` + `ruff format --check` clean. CI: `cli-lint` + `cli-test` jobs added to `.github/workflows/ci.yml`.
 
 ## 5. Deploy (`deploy/`)
 
@@ -247,7 +273,6 @@ Not used yet. `make cli-install` target exists for future install in editable mo
 
 ## 10. What's NOT shipped yet (planned for future)
 
-- CLI: Typer-based, query + admin ops.
 - Observability: OpenTelemetry, Prometheus exporters, Grafana JSON, Loki.
 - Helm chart: K8s production deploy.
 - E2E: Playwright E2E, k6 load, integration suite.

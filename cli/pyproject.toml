@@ -1,0 +1,86 @@
+[project]
+name = "knowgate-cli"
+version = "0.1.0"
+description = "KnowGate CLI — engineer query + admin ops client for the KnowGate RAG platform"
+readme = "../README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "MIT" }
+authors = [
+    { name = "KnowGate Team" }
+]
+
+dependencies = [
+    # CLI framework
+    "typer>=0.12.0",
+    # HTTP client (sync API is enough for CLI; async not needed)
+    "httpx>=0.28.0",
+    # Validation (mirror backend request/response shapes)
+    "pydantic>=2.10.0",
+    # Terminal output (tables, spinners, colors)
+    "rich>=13.9.0",
+    # System keychain for credential storage
+    "keyring>=25.0.0",
+    # TOML writer (stdlib tomllib is read-only on 3.12)
+    "tomli-w>=0.4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.7.0",
+    "mypy>=1.13.0",
+    "respx>=0.21.0",
+]
+
+[project.scripts]
+kg = "knowgate_cli.main:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["knowgate_cli"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "N",   # pep8-naming
+    "SIM", # flake8-simplify
+    "RUF", # ruff-specific
+]
+ignore = [
+    "B008",  # do not perform function calls in argument defaults
+    "E501",  # line too long (handled by formatter)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "B011", "RUF012"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+disallow_untyped_defs = true
+warn_unused_ignores = true
+warn_return_any = true
+exclude = ["tests/"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = ["-ra", "--strict-markers", "--strict-config"]
