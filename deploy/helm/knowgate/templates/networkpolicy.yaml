@@ -1,0 +1,74 @@
+{{- if .Values.networkPolicy.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "knowgate.fullname" . }}
+  labels:
+    {{- include "knowgate.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "knowgate.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow ingress from anywhere on the API port (fronted by the ingress
+    # controller; cluster-level restrictions belong in the ingress namespace).
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - port: 8000
+          protocol: TCP
+    # Allow ingress from Prometheus (cross-namespace) on metrics port.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.serviceMonitor.prometheusNamespace }}
+      ports:
+        - port: 8000
+          protocol: TCP
+        - port: 9090
+          protocol: TCP
+  egress:
+    # Allow DNS.
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # Allow egress to PostgreSQL, Redis, Qdrant, MinIO (cluster-internal).
+    - to:
+        - podSelector: {}
+      ports:
+        - port: {{ .Values.postgres.port }}
+          protocol: TCP
+        - port: {{ .Values.redis.port }}
+          protocol: TCP
+        - port: {{ .Values.qdrant.httpPort }}
+          protocol: TCP
+        - port: {{ .Values.qdrant.grpcPort }}
+          protocol: TCP
+        - port: {{ .Values.minio.apiPort }}
+          protocol: TCP
+        - port: {{ .Values.litellm.service.port }}
+          protocol: TCP
+    {{- if .Values.networkPolicy.allowEgressOpenAI }}
+    # Allow egress to OpenAI.
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - port: 443
+          protocol: TCP
+    {{- end }}
+    {{- if .Values.networkPolicy.allowEgressAnthropic }}
+    # Allow egress to Anthropic.
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - port: 443
+          protocol: TCP
+    {{- end }}
+{{- end }}

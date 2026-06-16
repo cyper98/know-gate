@@ -1,0 +1,79 @@
+# Promtail: ship container stdout to Loki.
+# Reads from:
+#   /var/lib/docker/containers/**/*.log  (docker compose dev)
+#   /var/log/pods/**/*.log               (Kubernetes prod)
+# Parses JSON-formatted structlog output and extracts service, level,
+# env, and trace_id as Loki labels / parsed fields.
+
+server:
+  http_listen_port: 9080
+  log_level: info
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+    batchwait: 1s
+    batchsize: 1048576
+    backoff_config:
+      min_period: 500ms
+      max_period: 5m
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      - source_labels: ["__meta_docker_container_name"]
+        target_label: container
+        regex: /(.*)
+      - source_labels: ["__meta_docker_container_label_service"]
+        target_label: service
+      - source_labels: ["__meta_docker_container_label_env"]
+        target_label: env
+    pipeline_stages:
+      - docker: {}
+      - match:
+          selector: '{service=~"api|worker|beat"}'
+          stages:
+            - json:
+                expressions:
+                  level: level
+                  event: event
+                  trace_id: trace_id
+                  request_id: request_id
+            - labels:
+                level:
+            - template:
+                source: msg
+                template: '{{ .entry }}'
+      - match:
+          selector: '{service=~".*"}'
+          stages:
+            - labeldrop:
+                - filename
+
+  - job_name: pods
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: podlogs
+          __path__: /var/log/pods/*/*/*.log
+    pipeline_stages:
+      - cri: {}
+      - json:
+          expressions:
+            level: level
+            event: event
+            trace_id: trace_id
+            request_id: request_id
+      - labels:
+          level:
+      - match:
+          selector: '{job="podlogs"}'
+          stages:
+            - labeldrop:
+                - filename

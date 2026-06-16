@@ -1,0 +1,110 @@
+# Prometheus alert rules for KnowGate.
+# Seven rules, grouped by severity. Each rule uses `for:` to avoid
+# flap and pairs a PromQL expression with a human-friendly summary.
+
+groups:
+  - name: knowgate-api
+    rules:
+      - alert: APIHighErrorRate
+        expr: |
+          sum(rate(kg_api_requests_total{status=~"5.."}[5m]))
+            /
+          sum(rate(kg_api_requests_total[5m]))
+            > 0.01
+        for: 5m
+        labels:
+          severity: critical
+          service: knowgate-api
+        annotations:
+          summary: "API 5xx error rate above 1% for 5m"
+          description: |
+            5xx rate is {{ $value | humanizePercentage }} over the last 5 minutes.
+            Check the API logs and recent deployments.
+
+      - alert: APISlowLatency
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(kg_api_request_duration_seconds_bucket[10m])))
+            > 5
+        for: 10m
+        labels:
+          severity: warning
+          service: knowgate-api
+        annotations:
+          summary: "API P95 latency above 5s for 10m"
+          description: |
+            P95 latency is {{ $value | humanizeDuration }} over the last 10 minutes.
+            Likely causes: slow LLM upstream, Qdrant overload, or DB contention.
+
+  - name: knowgate-sync
+    rules:
+      - alert: SyncFailureSpike
+        expr: |
+          sum(increase(kg_sync_jobs_total{status="failed"}[15m])) > 3
+        for: 5m
+        labels:
+          severity: critical
+          service: knowgate-worker
+        annotations:
+          summary: "More than 3 sync jobs failed in 15m"
+          description: |
+            {{ $value }} failed sync jobs in the last 15 minutes.
+            Check the worker logs and the per-source error summary.
+
+      - alert: EmbeddingQueueLag
+        expr: |
+          kg_queue_depth{queue="embedding"} > 50
+        for: 30m
+        labels:
+          severity: warning
+          service: knowgate-worker
+        annotations:
+          summary: "Embedding queue depth above 50 for 30m"
+          description: |
+            The embedding queue has been backlogged for 30 minutes.
+            Scale workers or check bge-m3 model health.
+
+  - name: knowgate-llm
+    rules:
+      - alert: LLMCostSpike
+        expr: |
+          sum(increase(kg_llm_cost_usd_total[1h])) * 24 > 50
+        for: 30m
+        labels:
+          severity: warning
+          service: knowgate-api
+        annotations:
+          summary: "LLM daily cost run-rate above $50"
+          description: |
+            Projected 24h cost from the last hour: ${{ $value | humanize }}.
+            Likely an abusive query pattern or runaway retry loop.
+
+  - name: knowgate-infra
+    rules:
+      - alert: QdrantDown
+        expr: up{job="knowgate-api"} == 0
+        for: 3m
+        labels:
+          severity: critical
+          service: knowgate-infra
+        annotations:
+          summary: "Qdrant downstream unreachable for 3m"
+          description: |
+            The /ready probe has been failing for 3 minutes — Qdrant
+            is the most likely culprit. Check the qdrant container.
+
+      - alert: DiskFull
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/"}
+            /
+          node_filesystem_size_bytes{mountpoint="/"})
+            < 0.10
+        for: 10m
+        labels:
+          severity: critical
+          service: knowgate-infra
+        annotations:
+          summary: "Disk usage above 90%"
+          description: |
+            Only {{ $value | humanizePercentage }} of disk is free on
+            mount {{ $labels.mountpoint }}. Clean up logs or expand
+            the volume.

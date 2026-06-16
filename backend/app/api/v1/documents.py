@@ -19,6 +19,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 from fastapi import Query as QueryParam
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -220,11 +221,11 @@ async def update_document(
     return _doc_to_response(doc)
 
 
-@router.delete("/{doc_id}", status_code=204)
+@router.delete("/{doc_id}", status_code=204, response_class=Response)
 async def delete_document(
     doc_id: str,
     user: dict = Depends(require_permission(Permission.DELETE_DOC)),
-) -> None:
+):
     """Soft-delete: set status to `deleted` (retains history for retention window)."""
     factory = get_session_factory()
     async with factory() as session:

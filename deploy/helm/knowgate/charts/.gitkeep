@@ -1,0 +1,3 @@
+# Subcharts are fetched at deploy time (helm dependency update) and are
+# intentionally not vendored in git. Bitnami subcharts for PostgreSQL, Redis,
+# Qdrant, and MinIO are pinned in Chart.yaml dependencies.

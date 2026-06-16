@@ -19,6 +19,7 @@ real request after boot does not pay a 5+ second model load.
 from __future__ import annotations
 
 import asyncio
+import time
 
 from celery.signals import worker_init
 from sqlalchemy import select
@@ -27,6 +28,11 @@ from app.celery_app import celery_app
 from app.db.models import Chunk
 from app.db.session import get_session_factory
 from app.logging import get_logger
+from app.observability.metrics import (
+    ACTIVE_SYNC_JOBS,
+    SYNC_JOB_DURATION,
+    SYNC_JOBS_TOTAL,
+)
 from app.pipeline.embedder import prewarm_embedder
 from app.pipeline.indexer import ingest_document
 from app.vector.client import get_qdrant_client
@@ -41,6 +47,7 @@ REEMBED_BATCH_SIZE = 256
 
 
 # === Tasks ===
+
 
 @celery_app.task(
     name="ingest_doc",
@@ -58,18 +65,31 @@ def ingest_doc_task(self, doc_id: str) -> dict:
     are NOT retried.
     """
     logger.info("ingest_task_start", doc_id=doc_id)
+    ACTIVE_SYNC_JOBS.inc()
+    start = time.perf_counter()
+    status_label = "completed"
+    # Use a fixed low-cardinality label for ingest tasks — the doc_id
+    # itself is logged but never used as a metric label.
+    source_label = "ingest"
     try:
         result = asyncio.run(ingest_document(doc_id))
     except Exception as e:
+        status_label = "failed"
         logger.exception("ingest_task_crashed", doc_id=doc_id, error=str(e))
         # Don't retry "document not found" / "already active"
         msg = str(e).lower()
         if "not found" in msg or "already" in msg:
+            status_label = "skipped"
             return {"doc_id": doc_id, "status": "skipped", "error": str(e)[:200]}
         try:
             raise self.retry(exc=e)
         except self.MaxRetriesExceededError:
             return {"doc_id": doc_id, "status": "failed", "error": str(e)[:500]}
+    finally:
+        duration = time.perf_counter() - start
+        SYNC_JOBS_TOTAL.labels(source=source_label, status=status_label).inc()
+        SYNC_JOB_DURATION.labels(source=source_label).observe(duration)
+        ACTIVE_SYNC_JOBS.dec()
     logger.info("ingest_task_done", doc_id=doc_id, status=result.status, chunks=result.chunk_count)
     return {
         "doc_id": doc_id,
@@ -103,7 +123,9 @@ def reembed_all_task(self, model_version: str | None = None) -> dict:
     async def _run() -> dict:
         # Gather all chunk ids in the DB
         async with factory() as session:
-            rows = await session.execute(select(Chunk.id, Chunk.chunk_text, Chunk.document_id, Chunk.chunk_index))
+            rows = await session.execute(
+                select(Chunk.id, Chunk.chunk_text, Chunk.document_id, Chunk.chunk_index)
+            )
             all_chunks = rows.all()
         total = len(all_chunks)
         if total == 0:
@@ -147,9 +169,7 @@ def reembed_all_task(self, model_version: str | None = None) -> dict:
 
         # Update embedding_model on all chunks (PG metadata)
         async with factory() as session:
-            chunks_rows = (
-                await session.execute(select(Chunk))
-            ).scalars().all()
+            chunks_rows = (await session.execute(select(Chunk))).scalars().all()
             for c in chunks_rows:
                 c.embedding_model = target_version
                 c.embedding_dim = embed_dim()
@@ -186,6 +206,7 @@ def reembed_one_task(chunk_id: str) -> dict:
 
         vectors = await asyncio.to_thread(embed_batch, [text])
         from qdrant_client.http import models as qmodels
+
         point = qmodels.PointStruct(
             id=make_point_id(doc_id, chunk_index),
             vector=vectors[0].tolist(),
@@ -210,6 +231,7 @@ def reembed_one_task(chunk_id: str) -> dict:
 
 
 # === Worker startup hook ===
+
 
 def prewarm() -> None:
     """Load the bge-m3 model into memory.

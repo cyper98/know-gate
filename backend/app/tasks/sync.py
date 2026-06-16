@@ -15,6 +15,7 @@ inside the task body.
 from __future__ import annotations
 
 import asyncio
+import time
 import uuid
 from datetime import UTC, datetime
 
@@ -25,12 +26,18 @@ from app.db.enums import SyncJobStatus
 from app.db.models import Source, SyncJob
 from app.db.session import get_session_factory
 from app.logging import get_logger
+from app.observability.metrics import (
+    ACTIVE_SYNC_JOBS,
+    SYNC_JOB_DURATION,
+    SYNC_JOBS_TOTAL,
+)
 from app.sources.sync import run_sync
 
 logger = get_logger(__name__)
 
 
 # === Tasks ===
+
 
 @celery_app.task(name="sync_source", bind=True, max_retries=3, default_retry_delay=30)
 def sync_source_task(self, source_id: str, triggered_by: str = "manual") -> str:
@@ -40,9 +47,13 @@ def sync_source_task(self, source_id: str, triggered_by: str = "manual") -> str:
     retried (they need admin intervention).
     """
     job_id = asyncio.run(_create_job(source_id, triggered_by))
+    ACTIVE_SYNC_JOBS.inc()
+    start = time.perf_counter()
+    status_label = "completed"
     try:
         asyncio.run(run_sync(source_id=source_id, job_id=job_id, triggered_by=triggered_by))
     except Exception as e:
+        status_label = "failed"
         logger.exception("sync_task_crashed", source_id=source_id, job_id=job_id)
         # Don't retry auth errors
         if "auth" in str(e).lower():
@@ -51,6 +62,11 @@ def sync_source_task(self, source_id: str, triggered_by: str = "manual") -> str:
             self.retry(exc=e)
         except self.MaxRetriesExceededError:
             asyncio.run(_finalize_crashed_job(job_id, str(e)))
+    finally:
+        duration = time.perf_counter() - start
+        SYNC_JOBS_TOTAL.labels(source=source_id, status=status_label).inc()
+        SYNC_JOB_DURATION.labels(source=source_id).observe(duration)
+        ACTIVE_SYNC_JOBS.dec()
     return job_id
 
 
@@ -71,6 +87,7 @@ def sync_all_sources_task() -> list[str]:
 
 
 # === Sync job lifecycle helpers (async, run via asyncio.run from sync tasks) ===
+
 
 async def _create_job(source_id: str, triggered_by: str) -> str:
     """Insert a QUEUED SyncJob row. Returns the job ID."""
@@ -106,7 +123,5 @@ async def _list_active_source_ids() -> list[str]:
     """Return IDs of all sources with status='active'."""
     factory = get_session_factory()
     async with factory() as session:
-        result = await session.execute(
-            select(Source.id).where(Source.status == "active")
-        )
+        result = await session.execute(select(Source.id).where(Source.status == "active"))
         return [str(row[0]) for row in result.all()]

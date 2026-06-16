@@ -1,0 +1,53 @@
+# Minimal Loki 2.9+ single-binary config for dev / self-host.
+# Storage: local filesystem under /loki. Production should swap to
+# S3 / GCS via the `common.storage` block.
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  log_level: info
+
+common:
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+query_range:
+  results_cache:
+    cache:
+      embedded_cache:
+        enabled: true
+        max_size_mb: 100
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+ruler:
+  alertmanager_url: http://alertmanager:9093
+  storage:
+    type: local
+    local:
+      directory: /loki/rules
+  rule_path: /loki/rules-tmp
+
+# Limit per-stream ingestion so a runaway service can't OOM the host.
+limits_config:
+  ingestion_rate_mb: 16
+  ingestion_burst_size_mb: 24
+  retention_period: 168h   # 7 days
+  max_query_length: 30d
+  max_query_parallelism: 4

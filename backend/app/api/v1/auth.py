@@ -17,6 +17,7 @@ import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi.responses import Response
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select
 
@@ -415,8 +416,8 @@ async def refresh(body: RefreshRequest) -> dict:
     }
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(user: CurrentUser, request: Request) -> None:
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
+async def logout(user: CurrentUser, request: Request):
     """Revoke the current access token (jti in Redis until original exp)."""
     client_ip = (
         getattr(request.state, "client_ip", None)

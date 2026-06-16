@@ -23,6 +23,7 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
@@ -227,11 +228,11 @@ async def update_group(
     )
 
 
-@router.delete("/{group_id}", status_code=204)
+@router.delete("/{group_id}", status_code=204, response_class=Response)
 async def delete_group(
     group_id: str,
     actor: dict = Depends(require_permission(Permission.MANAGE_GROUPS)),
-) -> None:
+):
     factory = get_session_factory()
     async with factory() as session:
         g = (
@@ -304,12 +305,12 @@ async def add_user_to_group(
     return {"group_id": g.id, "user_id": u.id}
 
 
-@router.delete("/{group_id}/users/{user_id}", status_code=204)
+@router.delete("/{group_id}/users/{user_id}", status_code=204, response_class=Response)
 async def remove_user_from_group(
     group_id: str,
     user_id: str,
     actor: dict = Depends(require_permission(Permission.MANAGE_GROUPS)),
-) -> None:
+):
     from sqlalchemy import delete as sql_delete
 
     factory = get_session_factory()
@@ -366,12 +367,12 @@ async def add_document_to_group(
     return {"group_id": g.id, "document_id": d.id}
 
 
-@router.delete("/{group_id}/documents/{doc_id}", status_code=204)
+@router.delete("/{group_id}/documents/{doc_id}", status_code=204, response_class=Response)
 async def remove_document_from_group(
     group_id: str,
     doc_id: str,
     actor: dict = Depends(require_permission(Permission.MANAGE_GROUPS)),
-) -> None:
+):
     from sqlalchemy import delete as sql_delete
 
     factory = get_session_factory()

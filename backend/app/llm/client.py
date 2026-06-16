@@ -23,6 +23,11 @@ import httpx
 
 from app.config import get_settings
 from app.logging import get_logger
+from app.observability.metrics import (
+    LLM_COST_USD_TOTAL,
+    LLM_REQUEST_DURATION,
+    LLM_TOKENS_TOTAL,
+)
 
 logger = get_logger(__name__)
 
@@ -180,6 +185,13 @@ class LLMClient:
         total_tokens = int(usage.get("total_tokens", prompt_tokens + completion_tokens))
         actual_model = body.get("model", target_model)
         cost = _estimate_cost_usd(actual_model, prompt_tokens, completion_tokens)
+
+        # Observability: emit per-call metrics. Label values are
+        # bounded (model = small enum, type = 2 values).
+        LLM_TOKENS_TOTAL.labels(model=actual_model, type="prompt").inc(prompt_tokens)
+        LLM_TOKENS_TOTAL.labels(model=actual_model, type="completion").inc(completion_tokens)
+        LLM_COST_USD_TOTAL.labels(model=actual_model).inc(cost)
+        LLM_REQUEST_DURATION.labels(model=actual_model).observe(latency_ms / 1000.0)
 
         if self._breaker is not None:
             self._breaker.record_success(actual_model)

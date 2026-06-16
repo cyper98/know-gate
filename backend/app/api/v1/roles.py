@@ -19,6 +19,7 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
@@ -247,11 +248,11 @@ async def update_role(
     )
 
 
-@router.delete("/{role_id}", status_code=204)
+@router.delete("/{role_id}", status_code=204, response_class=Response)
 async def delete_role(
     role_id: str,
     actor: dict = Depends(require_permission(Permission.MANAGE_ROLES)),
-) -> None:
+):
     factory = get_session_factory()
     async with factory() as session:
         role = (

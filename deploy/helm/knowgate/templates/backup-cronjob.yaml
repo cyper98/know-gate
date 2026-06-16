@@ -1,0 +1,132 @@
+{{- if .Values.backup.enabled -}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "knowgate.fullname" . }}-backup
+  labels:
+    {{- include "knowgate.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        metadata:
+          labels:
+            {{- include "knowgate.labels" . | nindent 12 }}
+            app.kubernetes.io/component: backup
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: {{ include "knowgate.serviceAccountName" . }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
+            fsGroup: 1001
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: pg-dump
+              image: {{ .Values.backup.postgresImage.repository }}:{{ .Values.backup.postgresImage.tag }}
+              imagePullPolicy: {{ .Values.backup.postgresImage.pullPolicy }}
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
+                  FILENAME="pgdump-${TIMESTAMP}.sql.gz"
+                  pg_dump -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" \
+                    -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --clean \
+                    | gzip > /backup/"$FILENAME"
+                  # Upload to S3
+                  mc alias set s3 "$S3_ENDPOINT" "$S3_ACCESS_KEY" "$S3_SECRET_KEY"
+                  mc cp /backup/"$FILENAME" "s3/{{ .Values.backup.s3.bucket }}/postgres/${FILENAME}"
+                  # Retention: prune local files older than retentionDays
+                  find /backup -type f -mtime +{{ .Values.backup.retentionDays }} -delete
+              env:
+                - name: POSTGRES_HOST
+                  value: {{ .Values.postgres.host | quote }}
+                - name: POSTGRES_PORT
+                  value: {{ .Values.postgres.port | quote }}
+                - name: POSTGRES_DB
+                  value: {{ .Values.postgres.database | quote }}
+                - name: S3_ENDPOINT
+                  value: {{ .Values.backup.s3.endpoint | quote }}
+                - name: S3_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.existingSecret | quote }}
+                      key: {{ .Values.backup.accessKeyKey | quote }}
+                - name: S3_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.existingSecret | quote }}
+                      key: {{ .Values.backup.secretKeyKey | quote }}
+                - name: POSTGRES_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.postgres.existingSecret | quote }}
+                      key: {{ .Values.postgres.usernameKey | quote }}
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.postgres.existingSecret | quote }}
+                      key: {{ .Values.postgres.passwordKey | quote }}
+              resources:
+                {{- toYaml .Values.backup.resources | nindent 16 }}
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+            - name: qdrant-snapshot
+              image: {{ .Values.backup.curlImage.repository }}:{{ .Values.backup.curlImage.tag }}
+              imagePullPolicy: {{ .Values.backup.curlImage.pullPolicy }}
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
+                  FILENAME="qdrant-snapshot-${TIMESTAMP}.tar"
+                  # Trigger snapshot
+                  curl -fsS -X POST "http://$QDRANT_HOST:$QDRANT_HTTP_PORT/collections/${QDRANT_COLLECTION}/snapshots"
+                  # Wait briefly then download latest snapshot.
+                  sleep 30
+                  LATEST=$(curl -fsS "http://$QDRANT_HOST:$QDRANT_HTTP_PORT/collections/${QDRANT_COLLECTION}/snapshots" | python -c "import json,sys; print(json.load(sys.stdin)['result']['snapshots'][-1]['name'])")
+                  curl -fsS -o /backup/"$FILENAME" "http://$QDRANT_HOST:$QDRANT_HTTP_PORT/collections/${QDRANT_COLLECTION}/snapshots/${LATEST}"
+                  mc alias set s3 "$S3_ENDPOINT" "$S3_ACCESS_KEY" "$S3_SECRET_KEY"
+                  mc cp /backup/"$FILENAME" "s3/{{ .Values.backup.s3.bucket }}/qdrant/${FILENAME}"
+              env:
+                - name: QDRANT_HOST
+                  value: {{ .Values.qdrant.host | quote }}
+                - name: QDRANT_HTTP_PORT
+                  value: {{ .Values.qdrant.httpPort | quote }}
+                - name: QDRANT_COLLECTION
+                  value: "knowgate"
+                - name: S3_ENDPOINT
+                  value: {{ .Values.backup.s3.endpoint | quote }}
+                - name: S3_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.existingSecret | quote }}
+                      key: {{ .Values.backup.accessKeyKey | quote }}
+                - name: S3_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.existingSecret | quote }}
+                      key: {{ .Values.backup.secretKeyKey | quote }}
+              resources:
+                {{- toYaml .Values.backup.resources | nindent 16 }}
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+          volumes:
+            - name: backup
+              emptyDir:
+                sizeLimit: 5Gi
+{{- end }}

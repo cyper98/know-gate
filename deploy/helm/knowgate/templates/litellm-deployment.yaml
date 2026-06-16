@@ -1,0 +1,100 @@
+{{- if .Values.litellm.enabled -}}
+{{- $component := "litellm" -}}
+{{- $top := . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "knowgate.fullname" $ }}-{{ $component }}
+  labels:
+    {{- include "knowgate.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $component }}
+spec:
+  replicas: {{ .Values.litellm.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "knowgate.componentSelectorLabels" (list $ $component) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "knowgate.labels" $ | nindent 8 }}
+        app.kubernetes.io/component: {{ $component }}
+    spec:
+      {{- include "knowgate.imagePullSecrets" $ | nindent 6 }}
+      serviceAccountName: {{ include "knowgate.serviceAccountName" $ }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: litellm
+          image: {{ include "knowgate.image" (dict "image" .Values.litellm.image "Chart" .Chart) }}
+          imagePullPolicy: {{ .Values.litellm.image.pullPolicy }}
+          command:
+            - --config
+            - /app/config.yaml
+            - --port
+            - "4000"
+          ports:
+            - name: http
+              containerPort: {{ .Values.litellm.service.port }}
+              protocol: TCP
+          env:
+            - name: LITELLM_PORT
+              value: {{ .Values.litellm.service.port | quote }}
+          envFrom:
+            {{- include "knowgate.secretEnvFrom" $ | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.litellm.livenessProbe.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.litellm.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.litellm.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.litellm.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.litellm.livenessProbe.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.litellm.readinessProbe.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.litellm.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.litellm.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.litellm.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.litellm.readinessProbe.failureThreshold }}
+          resources:
+            {{- toYaml .Values.litellm.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "knowgate.fullname" $ }}-{{ $component }}
+  labels:
+    {{- include "knowgate.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $component }}
+spec:
+  type: {{ .Values.litellm.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.litellm.service.port }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "knowgate.componentSelectorLabels" (list $ $component) | nindent 4 }}
+{{- end }}

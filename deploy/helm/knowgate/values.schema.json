@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "KnowGate Helm chart values",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [],
+  "properties": {
+    "global": {
+      "type": "object",
+      "properties": {
+        "env": { "type": "string" },
+        "domain": { "type": "string" },
+        "imagePullSecrets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "api": {
+      "type": "object",
+      "required": ["image"],
+      "properties": {
+        "replicas": { "type": "integer", "minimum": 0 },
+        "image": {
+          "type": "object",
+          "required": ["repository"],
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string" },
+            "pullPolicy": {
+              "type": "string",
+              "enum": ["IfNotPresent", "Always", "Never"]
+            }
+          }
+        }
+      }
+    },
+    "worker": {
+      "type": "object",
+      "required": ["image"],
+      "properties": {
+        "replicas": { "type": "integer", "minimum": 0 },
+        "image": {
+          "type": "object",
+          "required": ["repository"],
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string" },
+            "pullPolicy": {
+              "type": "string",
+              "enum": ["IfNotPresent", "Always", "Never"]
+            }
+          }
+        }
+      }
+    },
+    "beat": {
+      "type": "object",
+      "properties": {
+        "replicas": { "type": "integer", "minimum": 0, "maximum": 1 },
+        "image": {
+          "type": "object",
+          "properties": {
+            "repository": { "type": "string" },
+            "tag": { "type": "string" }
+          }
+        }
+      }
+    },
+    "litellm": {
+      "type": "object",
+      "properties": {
+        "replicas": { "type": "integer", "minimum": 0 },
+        "image": {
+          "type": "object",
+          "properties": {
+            "repository": { "type": "string" },
+            "tag": { "type": "string" }
+          }
+        }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "properties": {
+        "className": { "type": "string" },
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "backup": {
+      "type": "object",
+      "properties": {
+        "schedule": { "type": "string" },
+        "retentionDays": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "properties": {
+        "existingSecret": { "type": "string" }
+      }
+    }
+  }
+}

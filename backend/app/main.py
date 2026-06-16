@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -33,6 +33,9 @@ from app.cache.client import check_redis, close_redis
 from app.config import get_settings
 from app.db.init import check_connection
 from app.logging import configure_logging, get_logger
+from app.middleware.trace_id import TraceIdMiddleware
+from app.observability.metrics import REQUEST_COUNT, REQUEST_DURATION
+from app.observability.tracing import instrument_fastapi_app, setup_tracing
 from app.storage.client import check_minio
 from app.vector.client import check_qdrant, close_qdrant
 
@@ -42,18 +45,6 @@ configure_logging(
     json_output=settings.is_production,
 )
 logger = get_logger(__name__)
-
-# Prometheus metrics
-REQUEST_COUNT = Counter(
-    "kg_api_requests_total",
-    "Total API requests",
-    ["method", "endpoint", "status"],
-)
-REQUEST_DURATION = Histogram(
-    "kg_api_request_duration_seconds",
-    "API request duration",
-    ["method", "endpoint"],
-)
 
 # CORS allowed origins (tighten per OAuth callback)
 CORS_ALLOWED_ORIGINS = [
@@ -129,8 +120,17 @@ app = FastAPI(
     },
 )
 
+# === Tracing setup (OTel TracerProvider + instrumentations) ===
+# Must run before the app starts receiving traffic.
+setup_tracing()
+instrument_fastapi_app(app)
+
 # === Middleware (outermost added last) ===
-# Global IP rate limit 
+# Trace-id binding (binds trace_id to structlog contextvars, adds
+# X-Trace-Id response header). Outermost so every downstream
+# middleware/handler sees the bound context.
+app.add_middleware(TraceIdMiddleware)
+# Global IP rate limit
 app.add_middleware(RateLimitMiddleware)
 # CORS (web origin only by default)
 app.add_middleware(
@@ -143,6 +143,7 @@ app.add_middleware(
 # Client IP capture (for audit + rate limit). Must come after CORS so
 # X-Forwarded-For is parsed correctly when behind a proxy.
 app.add_middleware(ClientIPMiddleware)
+
 
 # === Global error handlers ===
 # Re-shape HTTPException + RequestValidationError + unhandled into the
@@ -191,11 +192,10 @@ async def metrics_middleware(request: Request, call_next: Response) -> Response:
     duration = time.perf_counter() - start
     endpoint = request.url.path
     REQUEST_COUNT.labels(
-        method=request.method,
         endpoint=endpoint,
         status=response.status_code,
     ).inc()
-    REQUEST_DURATION.labels(method=request.method, endpoint=endpoint).observe(duration)
+    REQUEST_DURATION.labels(endpoint=endpoint).observe(duration)
     return response
 
 

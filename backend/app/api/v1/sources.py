@@ -23,6 +23,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -154,11 +155,11 @@ async def update_source(
     return SourceResponse.model_validate(src)
 
 
-@router.delete("/{source_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{source_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 async def delete_source(
     source_id: str,
     _user: dict = Depends(require_permission(Permission.MANAGE_SOURCES)),
-) -> None:
+):
     """Archive a source (soft delete — keeps history)."""
     factory = get_session_factory()
     async with factory() as session:

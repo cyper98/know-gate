@@ -1,0 +1,16 @@
+# Grafana dashboard provisioning — auto-loads every JSON file under
+# /etc/grafana/dashboards. Mount the local `dashboards/` dir there.
+
+apiVersion: 1
+
+providers:
+  - name: knowgate-dashboards
+    orgId: 1
+    folder: KnowGate
+    type: file
+    disableDeletion: true
+    updateIntervalSeconds: 30
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/dashboards
+      foldersFromFilesStructure: false

@@ -1,0 +1,70 @@
+# Alertmanager routing for KnowGate.
+# - Critical alerts → email + Slack (when webhook is set)
+# - Warning alerts → email only
+# - Group by alert name + service to keep noise down
+# - Inhibit: when a service is down, suppress per-endpoint alerts for it
+
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: default
+  group_by: ["alertname", "service"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers:
+        - severity = "critical"
+      receiver: critical
+      group_wait: 10s
+      repeat_interval: 1h
+      continue: true
+    - matchers:
+        - severity = "warning"
+      receiver: warning
+      repeat_interval: 6h
+
+inhibit_rules:
+  - source_matchers:
+      - alertname = "QdrantDown"
+    target_matchers:
+      - service = "knowgate-api"
+    equal: ["service"]
+
+receivers:
+  - name: default
+    # Defaults to a no-op; routes above override per severity.
+    webhook_configs:
+      - url: http://localhost:5001/sink
+        send_resolved: true
+
+  - name: critical
+    email_configs:
+      - to: ${ALERT_EMAIL_TO:?ALERT_EMAIL_TO required}
+        from: ${ALERT_EMAIL_FROM:?ALERT_EMAIL_FROM required}
+        smarthost: ${SMTP_SMARTHOST:?SMTP_SMARTHOST required}
+        auth_username: ${SMTP_USERNAME:-}
+        auth_password: ${SMTP_PASSWORD:-}
+        send_resolved: true
+        headers:
+          Subject: "[CRITICAL] KnowGate {{ .GroupLabels.alertname }}"
+    # Slack webhook is optional — Alertmanager logs a warning if the
+    # URL is unreachable but does not block delivery to email.
+    slack_configs:
+      - api_url: ${SLACK_WEBHOOK_URL:-http://localhost:9/sink}
+        channel: ${SLACK_CHANNEL:-#knowgate-alerts}
+        send_resolved: true
+        title: "[CRITICAL] {{ .GroupLabels.alertname }}"
+        text: "{{ range .Alerts }}{{ .Annotations.summary }}\n{{ .Annotations.description }}{{ end }}"
+
+  - name: warning
+    email_configs:
+      - to: ${ALERT_EMAIL_TO:?ALERT_EMAIL_TO required}
+        from: ${ALERT_EMAIL_FROM:?ALERT_EMAIL_FROM required}
+        smarthost: ${SMTP_SMARTHOST:?SMTP_SMARTHOST required}
+        auth_username: ${SMTP_USERNAME:-}
+        auth_password: ${SMTP_PASSWORD:-}
+        send_resolved: true
+        headers:
+          Subject: "[WARN] KnowGate {{ .GroupLabels.alertname }}"

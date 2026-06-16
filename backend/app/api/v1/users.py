@@ -30,6 +30,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 from fastapi import Query as QueryParam
+from fastapi.responses import Response
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
@@ -369,11 +370,11 @@ async def update_user(
     )
 
 
-@router.delete("/{user_id}", status_code=204)
+@router.delete("/{user_id}", status_code=204, response_class=Response)
 async def soft_delete_user(
     user_id: str,
     actor: dict = Depends(require_permission(Permission.MANAGE_USERS)),
-) -> None:
+):
     """Soft-delete (GDPR). Sets status=deleted; the row is hard-deleted by a cron after retention."""
     factory = get_session_factory()
     async with factory() as session:
@@ -472,12 +473,12 @@ async def assign_role(
     return {"user_id": u.id, "role": role.name, "role_id": role.id}
 
 
-@router.delete("/{user_id}/roles/{role_id}", status_code=204)
+@router.delete("/{user_id}/roles/{role_id}", status_code=204, response_class=Response)
 async def revoke_role(
     user_id: str,
     role_id: str,
     actor: dict = Depends(require_permission(Permission.MANAGE_USERS)),
-) -> None:
+):
     factory = get_session_factory()
     async with factory() as session:
         # Resolve role (for the audit log message)

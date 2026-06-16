@@ -1,0 +1,51 @@
+# Prometheus scrape config for KnowGate.
+# Scrapes the API and Celery worker processes. Workers expose metrics
+# on a sidecar port only when a dedicated metrics endpoint is wired in
+# (currently they share the API metrics registry via the worker process
+# if the worker exposes one — disabled by default).
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: knowgate-monitor
+    env: dev
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+scrape_configs:
+  - job_name: knowgate-api
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - api:8000
+        labels:
+          service: knowgate-api
+          tier: backend
+
+  - job_name: knowgate-worker
+    metrics_path: /metrics
+    # Workers only expose metrics when PROMETHEUS_MULTIPROC_DIR is set
+    # and a small WSGI server is added. Disabled until then so we
+    # don't get noisy "connection refused" alerts.
+    enabled: false
+    static_configs:
+      - targets:
+          - worker:9100
+        labels:
+          service: knowgate-worker
+          tier: worker
+
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - localhost:9090
+        labels:
+          service: prometheus

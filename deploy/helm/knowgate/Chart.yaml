@@ -1,0 +1,31 @@
+apiVersion: v2
+name: knowgate
+description: KnowGate - open-source RAG knowledge search and Q&A platform
+type: application
+
+# Chart version. Bump on every chart change.
+version: 0.1.0
+
+# Application version. Bump on every release of KnowGate itself.
+appVersion: "0.1.0"
+
+home: https://github.com/knowgate/knowgate
+sources:
+  - https://github.com/knowgate/knowgate
+
+maintainers:
+  - name: KnowGate Maintainers
+    email: maintainers@knowgate.example.com
+
+kubeVersion: ">=1.28.0-0"
+
+keywords:
+  - knowgate
+  - rag
+  - knowledge-base
+  - llm
+  - ai
+
+annotations:
+  category: AI/MachineLearning
+  licenses: MIT

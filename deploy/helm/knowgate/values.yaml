@@ -1,0 +1,318 @@
+# -- Default values for the KnowGate Helm chart.
+# Documentation is rendered by helm-docs; do not remove the "# --" prefix on
+# individual entries that should appear in the generated README.
+
+# -- Global settings that apply to every component.
+global:
+  # -- Environment name (e.g. production, staging, dev). Drives naming and
+  # resource sizing defaults.
+  env: production
+  # -- Public DNS suffix for the cluster. Used by ingress and TLS.
+  domain: knowgate.example.com
+  # -- Image pull secrets applied to every pod. Use this when the registry is
+  # private (e.g. GHCR with read-only credentials).
+  imagePullSecrets: []
+  # -- Override the chart name used in resource labels and selectors.
+  nameOverride: ""
+  # -- Override the full resource name (defaults to release name + chart name).
+  fullnameOverride: ""
+
+# -- API service configuration (FastAPI HTTP server).
+api:
+  # -- Enable the API workload.
+  enabled: true
+  # -- Number of API replicas. The chart assumes 3 for HA by default.
+  replicas: 3
+  # -- Container image repository (no tag).
+  image:
+    repository: ghcr.io/knowgate/api
+    # -- Image tag. Defaults to .Chart.AppVersion when omitted.
+    tag: ""
+    # -- Image pull policy.
+    pullPolicy: IfNotPresent
+  # -- API pod-level resources. Conservative defaults; tune per workload.
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+  # -- Horizontal Pod Autoscaler for the API.
+  hpa:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+  # -- PodDisruptionBudget for the API.
+  pdb:
+    enabled: true
+    minAvailable: 2
+  # -- Container port exposed by the FastAPI server.
+  service:
+    type: ClusterIP
+    port: 8000
+  # -- API init container: run alembic migrations before serving traffic.
+  initMigrate:
+    enabled: true
+  # -- API init container: idempotent seed script.
+  initSeed:
+    enabled: true
+  # -- Liveness probe path. The backend exposes /health.
+  livenessProbe:
+    path: /health
+    initialDelaySeconds: 20
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  # -- Readiness probe path.
+  readinessProbe:
+    path: /health
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+# -- Celery worker configuration.
+worker:
+  # -- Enable the worker workload.
+  enabled: true
+  # -- Static replica count when HPA is disabled.
+  replicas: 2
+  # -- Container image.
+  image:
+    repository: ghcr.io/knowgate/api
+    tag: ""
+    pullPolicy: IfNotPresent
+  # -- Worker pod resources. bge-m3 embedding model needs more RAM than the API.
+  resources:
+    requests:
+      cpu: "2"
+      memory: 4Gi
+    limits:
+      cpu: "4"
+      memory: 8Gi
+  # -- Horizontal Pod Autoscaler for the worker.
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+  # -- PodDisruptionBudget.
+  pdb:
+    enabled: true
+    minAvailable: 1
+  # -- Celery worker concurrency flag.
+  concurrency: 2
+  # -- Worker liveness probe (custom exec since Celery worker has no HTTP).
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 60
+    periodSeconds: 60
+    timeoutSeconds: 10
+    failureThreshold: 3
+
+# -- Celery beat configuration (scheduler, single replica with leader election).
+beat:
+  # -- Enable the beat workload.
+  enabled: true
+  # -- Beat is single-instance by design; leader election enforces it.
+  replicas: 1
+  leaderElection: true
+  # -- Container image.
+  image:
+    repository: ghcr.io/knowgate/api
+    tag: ""
+    pullPolicy: IfNotPresent
+  # -- Beat pod resources (light scheduler).
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  # -- Beat liveness probe.
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 60
+    timeoutSeconds: 10
+    failureThreshold: 3
+
+# -- LiteLLM gateway configuration.
+litellm:
+  # -- Enable the LiteLLM workload.
+  enabled: true
+  replicas: 2
+  # -- Container image.
+  image:
+    repository: ghcr.io/berriai/litellm
+    tag: main-stable
+    pullPolicy: IfNotPresent
+  # -- LiteLLM pod resources.
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  service:
+    type: ClusterIP
+    port: 4000
+  # -- Liveness and readiness probes for LiteLLM.
+  livenessProbe:
+    path: /health/liveliness
+    initialDelaySeconds: 20
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    path: /health/readiness
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+# -- PostgreSQL configuration. Disabled by default; the chart references an
+# existing database. Enable to deploy a managed Postgres alongside.
+postgres:
+  enabled: false
+  # -- Service host (only used when enabled=false and postgres is external).
+  host: ""
+  # -- Service port.
+  port: 5432
+  # -- Database name.
+  database: knowgate
+  # -- Existing Kubernetes secret holding DB credentials.
+  existingSecret: ""
+  # -- Secret key inside existingSecret for username.
+  usernameKey: username
+  # -- Secret key inside existingSecret for password.
+  passwordKey: password
+  # -- Storage size (only when enabled=true and using the bundled subchart).
+  storage: 100Gi
+  storageClass: gp3
+
+# -- Redis configuration (Celery broker + cache).
+redis:
+  enabled: false
+  host: ""
+  port: 6379
+  existingSecret: ""
+  passwordKey: password
+  storage: 10Gi
+  storageClass: gp3
+
+# -- Qdrant vector database configuration.
+qdrant:
+  enabled: false
+  host: ""
+  httpPort: 6333
+  grpcPort: 6334
+  storage: 100Gi
+  storageClass: gp3
+  # -- When true, deploy Qdrant in clustered mode (>=3 nodes).
+  cluster: false
+
+# -- MinIO object storage configuration.
+minio:
+  enabled: false
+  host: ""
+  apiPort: 9000
+  consolePort: 9001
+  existingSecret: ""
+  rootUserKey: rootUser
+  rootPasswordKey: rootPassword
+  storage: 500Gi
+  storageClass: gp3
+  # -- Number of MinIO nodes when enabled.
+  replicas: 4
+
+# -- Ingress configuration.
+ingress:
+  # -- Enable the Ingress resource.
+  enabled: true
+  # -- Ingress class name. Set to "nginx" or "traefik" depending on the cluster.
+  className: nginx
+  # -- Annotations merged onto the Ingress. Provide TLS-acquisition annotations
+  # (e.g. cert-manager) here.
+  annotations: {}
+  # -- Ingress hosts.
+  hosts:
+    - host: knowgate.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  # -- TLS settings; cert-manager is supported via annotations above.
+  tls:
+    - secretName: knowgate-tls
+      hosts:
+        - knowgate.example.com
+
+# -- NetworkPolicy for the application tier. Restricts DB access to in-cluster
+# pods only.
+networkPolicy:
+  enabled: true
+  # -- Allow egress to the public OpenAI API.
+  allowEgressOpenAI: true
+  # -- Allow egress to the public Anthropic API.
+  allowEgressAnthropic: true
+
+# -- ServiceMonitor for Prometheus Operator scrape.
+serviceMonitor:
+  enabled: true
+  # -- Scrape interval.
+  interval: 15s
+  # -- Scrape timeout.
+  scrapeTimeout: 10s
+  # -- Honor labels toggle for Prometheus.
+  honorLabels: false
+  # -- Namespace where Prometheus is installed (for the selector labels).
+  prometheusNamespace: monitoring
+
+# -- Backup CronJob configuration.
+backup:
+  enabled: true
+  # -- Cron schedule for the backup job (UTC). Default is daily at 02:00.
+  schedule: "0 2 * * *"
+  # -- Number of days to retain backup artifacts.
+  retentionDays: 30
+  # -- S3-compatible bucket for backup uploads.
+  s3:
+    bucket: knowgate-backups
+    region: us-east-1
+    endpoint: ""
+  # -- Backup job resources.
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  # -- Image for the pg_dump sidecar (postgres client only).
+  postgresImage:
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
+  # -- Image for the qdrant snapshot sidecar (curl + jq + mc).
+  curlImage:
+    repository: curlimages/curl
+    tag: "8.10.1"
+    pullPolicy: IfNotPresent
+  # -- Existing Kubernetes secret holding S3 credentials.
+  existingSecret: ""
+  accessKeyKey: accessKey
+  secretKeyKey: secretKey
+
+# -- Secret references consumed by application pods via envFrom.
+secrets:
+  # -- Name of an existing Kubernetes Secret that holds all sensitive values
+  # (created by Sealed Secrets or an external operator). When empty, the
+  # application pods will fail to start.
+  existingSecret: knowgate-secrets
+  # -- Optional map of secret keys -> env var names. When unset, every key in
+  # the secret is projected as an env var using its key name.
+  keys: {}
