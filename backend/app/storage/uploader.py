@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from typing import Any, BinaryIO
 
 from app.config import get_settings
 from app.storage.buckets import DOCUMENTS_BUCKET
 from app.storage.client import get_s3_client
 
-logger = logging.getLogger(__name__)
+from app.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 async def upload_doc(

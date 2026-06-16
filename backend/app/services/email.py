@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-import logging
 from email.message import EmailMessage
 
 import aiosmtplib
 
 from app.config import get_settings
 
-logger = logging.getLogger(__name__)
+from app.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 async def send_email(

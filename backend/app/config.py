@@ -182,6 +182,18 @@ class Settings(BaseSettings):
         return f"redis://{auth}{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
     @property
+    def redis_base_url(self) -> str:
+        """Redis URL without the trailing /<db> suffix.
+
+        Use this when you need to append a different database number
+        (e.g. Celery broker uses db 0, result backend uses db 1) so we
+        don't end up with a malformed URL like ``redis://host:6379/0/1``.
+        """
+        pwd = self.redis_password.get_secret_value()
+        auth = f":{pwd}@" if pwd else ""
+        return f"redis://{auth}{self.redis_host}:{self.redis_port}"
+
+    @property
     def qdrant_url(self) -> str:
         return f"http://{self.qdrant_host}:{self.qdrant_port}"
 

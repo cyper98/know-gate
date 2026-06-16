@@ -3,7 +3,6 @@ heavy client modules in the alembic env, which would create circular imports).""
 
 from __future__ import annotations
 
-import logging
 from datetime import UTC, datetime
 
 from argon2 import PasswordHasher
@@ -16,7 +15,9 @@ from app.db.session import get_session_factory
 from app.storage.buckets import init_documents_bucket
 from app.vector.collections import init_chunks_collection
 
-logger = logging.getLogger(__name__)
+from app.logging import get_logger
+
+logger = get_logger(__name__)
 _hasher = PasswordHasher()
 
 

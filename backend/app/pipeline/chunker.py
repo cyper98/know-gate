@@ -20,14 +20,14 @@ Output `Chunk` records carry:
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from app.logging import get_logger
 from app.pipeline.parser import ParsedDoc
 from app.pipeline.tokenizer import count_tokens
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Default sizes from architecture (chunk = 512 tokens target, 1024 max).
 DEFAULT_TARGET_TOKENS = 512

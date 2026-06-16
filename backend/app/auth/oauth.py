@@ -9,7 +9,6 @@ Per brainstorm §5.1 F1 + spec:
 
 from __future__ import annotations
 
-import logging
 import secrets
 import uuid
 from typing import Any
@@ -26,7 +25,9 @@ from app.db.enums import UserStatus
 from app.db.models import User, UserRole
 from app.db.models.role import Role
 
-logger = logging.getLogger(__name__)
+from app.logging import get_logger
+
+logger = get_logger(__name__)
 
 # TTL for OAuth state (CSRF token)
 OAUTH_STATE_TTL_SECONDS = 300  # 5 min

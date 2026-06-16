@@ -30,18 +30,18 @@ scrape_configs:
           service: knowgate-api
           tier: backend
 
-  - job_name: knowgate-worker
-    metrics_path: /metrics
-    # Workers only expose metrics when PROMETHEUS_MULTIPROC_DIR is set
-    # and a small WSGI server is added. Disabled until then so we
-    # don't get noisy "connection refused" alerts.
-    enabled: false
-    static_configs:
-      - targets:
-          - worker:9100
-        labels:
-          service: knowgate-worker
-          tier: worker
+  # knowgate-worker job is intentionally omitted.
+  # Workers only expose metrics when PROMETHEUS_MULTIPROC_DIR is set
+  # and a small WSGI server is added. Re-enable here once the worker
+  # exposes a metrics endpoint on :9100.
+  # - job_name: knowgate-worker
+  #   metrics_path: /metrics
+  #   static_configs:
+  #     - targets:
+  #         - worker:9100
+  #       labels:
+  #         service: knowgate-worker
+  #         tier: worker
 
   - job_name: prometheus
     static_configs:

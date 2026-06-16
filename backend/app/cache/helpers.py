@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any, TypeVar
 
 from app.cache.client import get_redis_client
@@ -16,8 +15,9 @@ from app.cache.keys import (
     rate_limit_user_key,
     session_jti_key,
 )
+from app.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 T = TypeVar("T")
 
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http import models as qmodels
@@ -11,7 +10,9 @@ from app.config import get_settings
 from app.vector.client import get_qdrant_client
 from app.vector.payload_schema import ChunkPayloadFields
 
-logger = logging.getLogger(__name__)
+from app.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 CHUNKS_COLLECTION = "chunks"
@@ -70,36 +71,21 @@ async def init_chunks_collection(force_recreate: bool = False) -> None:
         logger.info("qdrant_collection_exists", collection=CHUNKS_COLLECTION)
 
     # === Payload indexes (for fast filter on group_ids, doc_id, status) ===
+    # qdrant_client accepts (field_name, PayloadSchemaType) tuples for create_payload_index.
     payload_indexes = [
-        qmodels.PayloadIndexParams(
-            field_name=ChunkPayloadFields.GROUP_IDS,
-            field_schema=qmodels.PayloadSchemaType.KEYWORD,
-        ),
-        qmodels.PayloadIndexParams(
-            field_name=ChunkPayloadFields.DOC_ID,
-            field_schema=qmodels.PayloadSchemaType.KEYWORD,
-        ),
-        qmodels.PayloadIndexParams(
-            field_name=ChunkPayloadFields.STATUS,
-            field_schema=qmodels.PayloadSchemaType.KEYWORD,
-        ),
-        qmodels.PayloadIndexParams(
-            field_name=ChunkPayloadFields.LANGUAGE,
-            field_schema=qmodels.PayloadSchemaType.KEYWORD,
-        ),
-        qmodels.PayloadIndexParams(
-            field_name=ChunkPayloadFields.SOURCE,
-            field_schema=qmodels.PayloadSchemaType.KEYWORD,
-        ),
+        (ChunkPayloadFields.GROUP_IDS, qmodels.PayloadSchemaType.KEYWORD),
+        (ChunkPayloadFields.DOC_ID, qmodels.PayloadSchemaType.KEYWORD),
+        (ChunkPayloadFields.STATUS, qmodels.PayloadSchemaType.KEYWORD),
+        (ChunkPayloadFields.LANGUAGE, qmodels.PayloadSchemaType.KEYWORD),
+        (ChunkPayloadFields.SOURCE, qmodels.PayloadSchemaType.KEYWORD),
     ]
 
-    for idx in payload_indexes:
-        field = idx.field_name
+    for field, schema in payload_indexes:
         try:
             await client.create_payload_index(
                 collection_name=CHUNKS_COLLECTION,
                 field_name=field,
-                field_schema=idx.field_schema,
+                field_schema=schema,
             )
             logger.info("qdrant_payload_index_created", field=field)
         except Exception as e:

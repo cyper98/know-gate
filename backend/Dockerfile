@@ -4,8 +4,9 @@
 # === Stage 1: Builder ===
 FROM python:3.12-slim AS builder
 
-ENV PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+# NOTE: PIP_NO_CACHE_DIR removed — BuildKit cache mount handles caching
+# across builds without bloating the final image.
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
@@ -20,16 +21,28 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install hatch (build backend)
-RUN pip install --no-cache-dir hatch
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install hatch
 
-# Copy dependency files
-COPY pyproject.toml ./
+# Copy dependency files first (changes here invalidate downstream layers)
+COPY pyproject.toml README.md ./
 
-# Build wheel for the app
+# Pre-install heavy ML deps in a dedicated cached layer.
+# These dominate install time (~1.5 GB: torch + sentence-transformers + unstructured)
+# and rarely change — cache mount makes subsequent builds skip re-downloading.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install \
+      "torch>=2.5.0" \
+      "sentence-transformers>=3.2.0" \
+      "unstructured[all-docs]>=0.16.0"
+
+# Build wheel for the app (metadata + deps; app/ source copied in runtime stage)
 RUN hatch build --target wheel
 
-# Install all dependencies via wheel (single source of truth: pyproject.toml)
-RUN pip install --no-cache-dir dist/*.whl
+# Install app wheel — pip sees heavy deps already satisfied and skips them.
+# Only lighter deps (FastAPI, SQLAlchemy, qdrant, etc.) need downloading.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install dist/*.whl
 
 # === Stage 2: Runtime ===
 FROM python:3.12-slim AS runtime
@@ -56,6 +69,11 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy app source
 COPY --chown=knowgate:knowgate app/ /app/app/
+# Copy alembic config + migration tree (used by `init` and `api` on startup)
+COPY --chown=knowgate:knowgate alembic.ini /app/alembic.ini
+COPY --chown=knowgate:knowgate alembic/ /app/alembic/
+# Copy ops scripts (used by `init` for seed/admin setup)
+COPY --chown=knowgate:knowgate scripts/ /app/scripts/
 
 # Switch to non-root
 USER knowgate

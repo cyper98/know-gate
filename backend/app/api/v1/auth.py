@@ -13,7 +13,6 @@ Per the auth model:
 
 from __future__ import annotations
 
-import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
@@ -40,7 +39,9 @@ from app.db.models import User, UserRole
 from app.db.models.role import Role
 from app.db.session import get_session_factory
 
-logger = logging.getLogger(__name__)
+from app.logging import get_logger
+
+logger = get_logger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 

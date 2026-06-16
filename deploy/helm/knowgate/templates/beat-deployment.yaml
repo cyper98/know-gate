@@ -37,9 +37,10 @@ spec:
           command:
             - celery
             - -A
-            - app.worker.celery_app
+            - app.celery_app
             - beat
             - --loglevel=INFO
+            - --schedule=/tmp/celerybeat-schedule
             {{- if .Values.beat.leaderElection }}
             - --leader-election
             {{- end }}
@@ -53,7 +54,7 @@ spec:
               command:
                 - sh
                 - -c
-                - "celery -A app.worker.celery_app inspect ping -t 5 || exit 1"
+                - "celery -A app.celery_app inspect ping -t 5 || exit 1"
             initialDelaySeconds: {{ .Values.beat.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.beat.livenessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.beat.livenessProbe.timeoutSeconds }}

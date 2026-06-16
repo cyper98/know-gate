@@ -14,7 +14,7 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 # Ensure backend/ is on sys.path so `app.*` imports resolve
-BACKEND_DIR = Path(__file__).resolve.parent.parent
+BACKEND_DIR = Path(__file__).resolve().parent.parent
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 

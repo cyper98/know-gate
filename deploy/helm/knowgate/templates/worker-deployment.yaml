@@ -46,7 +46,7 @@ spec:
           command:
             - celery
             - -A
-            - app.worker.celery_app
+            - app.celery_app
             - worker
             - --loglevel=INFO
             - --concurrency={{ .Values.worker.concurrency | default 2 }}
@@ -64,7 +64,7 @@ spec:
               command:
                 - sh
                 - -c
-                - "celery -A app.worker.celery_app inspect ping -t 5 || exit 1"
+                - "celery -A app.celery_app inspect ping -t 5 || exit 1"
             initialDelaySeconds: {{ .Values.worker.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.worker.livenessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.worker.livenessProbe.timeoutSeconds }}

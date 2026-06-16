@@ -8,7 +8,6 @@ hash lives in DB. Verification hashes the inbound token and looks up the row.
 from __future__ import annotations
 
 import hashlib
-import logging
 
 from sqlalchemy import select
 
@@ -17,7 +16,9 @@ from app.db.models import User
 from app.db.session import get_session_factory
 from app.services.email import send_magic_link_email
 
-logger = logging.getLogger(__name__)
+from app.logging import get_logger
+
+logger = get_logger(__name__)
 
 # TTL for magic link tokens
 DEFAULT_MAGIC_LINK_TTL_MINUTES = 15

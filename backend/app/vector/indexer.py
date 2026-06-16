@@ -6,7 +6,6 @@ chunks per doc; the basic `upsert_chunk` is kept for one-off tests.
 
 from __future__ import annotations
 
-import logging
 import uuid
 from collections.abc import Sequence
 
@@ -16,7 +15,9 @@ from qdrant_client.http import models as qmodels
 from app.vector.collections import CHUNKS_COLLECTION
 from app.vector.payload_schema import ChunkPayload, PayloadStatus
 
-logger = logging.getLogger(__name__)
+from app.logging import get_logger
+
+logger = get_logger(__name__)
 
 # How many points to send in a single Qdrant upsert call.
 # 500 is the sweet spot from the Qdrant docs for write-heavy workloads.

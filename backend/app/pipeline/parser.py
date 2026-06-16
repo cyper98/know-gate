@@ -17,13 +17,14 @@ Design notes:
 from __future__ import annotations
 
 import io
-import logging
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-logger = logging.getLogger(__name__)
+from app.logging import get_logger
+
+logger = get_logger(__name__)
 
 # Headings we extract as section boundaries.
 # We keep this list narrow — h4 / h5 / h6 are too noisy for RAG.

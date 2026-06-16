@@ -12,7 +12,9 @@ from sqlalchemy import text
 
 from app.db.session import get_engine
 
-logger = logging.getLogger(__name__)
+from app.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 async def check_connection() -> bool:

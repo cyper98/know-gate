@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import logging
 
 import redis.asyncio as aioredis
 
 from app.config import get_settings
 
-logger = logging.getLogger(__name__)
+from app.logging import get_logger
+
+logger = get_logger(__name__)
 
 _client: aioredis.Redis | None = None
 

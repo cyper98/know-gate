@@ -17,7 +17,6 @@ metadata: type, name, status, last_sync_at).
 
 from __future__ import annotations
 
-import logging
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -34,7 +33,9 @@ from app.db.enums import SourceStatus, SourceType
 from app.db.models import Source, SyncJob
 from app.db.session import get_session_factory
 
-logger = logging.getLogger(__name__)
+from app.logging import get_logger
+
+logger = get_logger(__name__)
 router = APIRouter(prefix="/sources", tags=["sources"])
 
 

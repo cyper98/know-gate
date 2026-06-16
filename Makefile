@@ -30,7 +30,7 @@ endif
 COMPOSE := docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.dev.yml
 
 up:
-	$(COMPOSE) up -d
+	$(COMPOSE) up -d --build
 	@echo ""
 	@echo "Services up. Health check:"
 	@curl -sf http://localhost:8000/health || echo "API not ready yet (try make logs)"

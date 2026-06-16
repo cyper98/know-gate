@@ -16,13 +16,13 @@ services:
       KG_LOG_LEVEL: DEBUG
 
   worker:
-    command: ["celery", "-A", "app.worker.celery_app", "worker", "--loglevel=DEBUG", "--concurrency=2", "--reload"]
+    command: ["celery", "-A", "app.celery_app", "worker", "--loglevel=DEBUG", "--concurrency=2"]
     volumes:
       - ../backend/app:/app/app:ro
       - ../secrets:/app/secrets:ro
 
   beat:
-    command: ["celery", "-A", "app.worker.celery_app", "beat", "--loglevel=DEBUG"]
+    command: ["celery", "-A", "app.celery_app", "beat", "--loglevel=DEBUG", "--schedule=/tmp/celerybeat-schedule"]
     volumes:
       - ../backend/app:/app/app:ro
 

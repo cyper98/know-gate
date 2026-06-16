@@ -32,7 +32,9 @@ from app.db.models import (
 )
 from app.db.session import get_session_factory
 
-logger = logging.getLogger(__name__)
+from app.logging import get_logger
+
+logger = get_logger(__name__)
 settings = get_settings()
 _hasher = PasswordHasher()
 

@@ -12,11 +12,11 @@ because langdetect is unreliable on small inputs.
 
 from __future__ import annotations
 
-import logging
-
 from langdetect import DetectorFactory, detect_langs
 
-logger = logging.getLogger(__name__)
+from app.logging import get_logger
+
+logger = get_logger(__name__)
 
 # Make detection deterministic (langdetect uses a non-seeded random by
 # default, which makes our Qdrant payloads non-reproducible).

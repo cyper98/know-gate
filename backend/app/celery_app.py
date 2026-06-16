@@ -10,13 +10,12 @@ that crashed must be safe to re-run.
 
 from __future__ import annotations
 
-import logging
-
 from celery import Celery
 
 from app.config import get_settings
+from app.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 settings = get_settings()
 
 
@@ -25,8 +24,8 @@ def _make_celery() -> Celery:
     # If broker URL is not explicitly set, derive it from the Redis URL.
     # Celery uses DB 0 for the broker and DB 1 for the result backend by
     # convention (matches the pattern used in deploy/docker-compose.yml).
-    broker = settings.celery_broker_url or f"{settings.redis_url}/0"
-    backend = settings.celery_result_backend or f"{settings.redis_url}/1"
+    broker = settings.celery_broker_url or f"{settings.redis_base_url}/0"
+    backend = settings.celery_result_backend or f"{settings.redis_base_url}/1"
 
     app = Celery(
         "knowgate",

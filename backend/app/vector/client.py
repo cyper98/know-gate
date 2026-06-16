@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import logging
-
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.exceptions import UnexpectedResponse
 
 from app.config import get_settings
+from app.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 _client: AsyncQdrantClient | None = None
 

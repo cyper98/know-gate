@@ -18,7 +18,6 @@ Logging:
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -27,7 +26,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.responses import ErrorCode, ErrorDetail, ErrorResponse
 
-logger = logging.getLogger(__name__)
+from app.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 # === Status code → error code mapping ===

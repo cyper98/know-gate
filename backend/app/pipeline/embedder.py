@@ -21,13 +21,14 @@ Design notes:
 from __future__ import annotations
 
 import asyncio
-import logging
 import threading
 from typing import TYPE_CHECKING
 
 import numpy as np
 
-logger = logging.getLogger(__name__)
+from app.logging import get_logger
+
+logger = get_logger(__name__)
 
 # Default model name + dim (mirrors app.config.Settings defaults).
 DEFAULT_MODEL_NAME = "BAAI/bge-m3"

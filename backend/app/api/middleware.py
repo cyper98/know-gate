@@ -18,7 +18,6 @@ limits stay tight.
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Awaitable, Callable
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -29,7 +28,9 @@ from app.api.responses import ErrorCode, ErrorDetail, ErrorResponse
 from app.cache.helpers import check_ip_rate_limit
 from app.config import get_settings
 
-logger = logging.getLogger(__name__)
+from app.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 # Paths that bypass the global throttle (so health checks / metrics /

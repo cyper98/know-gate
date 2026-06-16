@@ -26,7 +26,9 @@ from scripts.init_helpers import (  # noqa: E402
     seed_default_data,
 )
 
-logger = logging.getLogger(__name__)
+from app.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 async def run_all_init() -> None:
