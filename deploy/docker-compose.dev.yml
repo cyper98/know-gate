@@ -39,3 +39,4 @@ services:
     environment:
       NODE_ENV: development
       NEXT_PUBLIC_API_URL: http://localhost:8000
+      KG_INTERNAL_API_URL: http://api:8000

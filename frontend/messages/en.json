@@ -223,9 +223,13 @@
       "title": "Settings",
       "subtitle": "System-wide preferences. Some settings are read-only in this build.",
       "defaultLanguage": "Default language",
-      "rateLimit": "Rate limit (requests / minute / IP)",
+      "rateLimit": "Rate limit (queries / minute)",
       "retentionDays": "Audit log retention (days)",
-      "featureFlags": "Feature flags",
+      "feedbackRetention": "Feedback retention (days)",
+      "maxDocSize": "Max document size",
+      "allowSignup": "Allow signup",
+      "yes": "Yes",
+      "no": "No",
       "readOnly": "Read-only in this build"
     },
     "audit": {

@@ -8,15 +8,15 @@
  */
 
 export type ErrorCode =
-  | "E1"  // INTERNAL (500)
-  | "E2"  // BAD_REQUEST (400) — also Pydantic validation
-  | "E3"  // UNAUTHORIZED (401)
-  | "E4"  // FORBIDDEN (403)
-  | "E5"  // NOT_FOUND (404)
-  | "E6"  // CONFLICT (409)
-  | "E7"  // RATE_LIMITED (429)
-  | "E8"  // SERVICE_UNAVAILABLE (503)
-  | "E9"  // PERMISSION_DENIED_DATA (403)
+  | "E1" // INTERNAL (500)
+  | "E2" // BAD_REQUEST (400) — also Pydantic validation
+  | "E3" // UNAUTHORIZED (401)
+  | "E4" // FORBIDDEN (403)
+  | "E5" // NOT_FOUND (404)
+  | "E6" // CONFLICT (409)
+  | "E7" // RATE_LIMITED (429)
+  | "E8" // SERVICE_UNAVAILABLE (503)
+  | "E9" // PERMISSION_DENIED_DATA (403)
   | "E10" // NO_ANSWER (200)
   | "E11" // EXTERNAL_API_ERROR (502/504)
   | "E12" // INVALID_STATE (409)
@@ -285,18 +285,27 @@ export interface GroupUpdate {
 // === Settings ===
 
 export interface SystemSettings {
+  id: string;
   default_language: string;
-  rate_limit_per_minute_per_ip: number;
-  audit_log_retention_days: number;
-  feature_flags: Record<string, boolean>;
+  default_query_language: string;
+  feedback_retention_days: number;
+  audit_retention_days: number;
+  rate_limit_query_per_minute: number;
+  max_doc_size_mb: number;
+  allow_signup: boolean;
+  extra: Record<string, unknown>;
+  created_at: string;
   updated_at: string;
 }
 
 export interface SystemSettingsUpdate {
   default_language?: string;
-  rate_limit_per_minute_per_ip?: number;
-  audit_log_retention_days?: number;
-  feature_flags?: Record<string, boolean>;
+  default_query_language?: string;
+  feedback_retention_days?: number;
+  audit_retention_days?: number;
+  rate_limit_query_per_minute?: number;
+  max_doc_size_mb?: number;
+  allow_signup?: boolean;
 }
 
 export interface AuditLogEntry {

@@ -178,7 +178,8 @@ async def register(
             action="user.register",
             target_type="user",
             target_id=user_id,
-            after={"email": body.email, "display_name": body.display_name, "role": "admin"},
+            after={"email": body.email,
+                "display_name": body.display_name, "role": "admin"},
             ip_address=getattr(request.state, "client_ip", None)
             or (request.client.host if request.client else None),
         )
@@ -219,7 +220,8 @@ async def login(
     # is not stored in the Redis keyspace.
     import hashlib
 
-    email_hash = hashlib.sha256(body.email.lower().encode("utf-8")).hexdigest()[:16]
+    email_hash = hashlib.sha256(
+        body.email.lower().encode("utf-8")).hexdigest()[:16]
     rate_key = f"{client_ip}:{email_hash}"
     _count, allowed = await check_ip_rate_limit(
         rate_key, window=900, limit=settings.rate_limit_login_per_15min
@@ -310,9 +312,11 @@ async def oauth_start(provider: str) -> dict:
     try:
         url = await get_authorization_url(provider)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
     except RuntimeError as e:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e)) from e
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e)) from e
     return {"authorize_url": url}
 
 
@@ -348,7 +352,8 @@ async def magic_link_request(
 ) -> dict:
     """Request a magic-link sign-in email. Always returns 202 (don't leak account existence)."""
     settings = get_settings()
-    base_url = f"http://{settings.kg_domain}:3000"  # web UI handles the actual click
+    # web UI handles the actual click
+    base_url = f"http://{settings.kg_domain}:3000"
     await request_magic_link(body.email, base_url)
     return {"message": "If an account exists for this email, a sign-in link has been sent."}
 

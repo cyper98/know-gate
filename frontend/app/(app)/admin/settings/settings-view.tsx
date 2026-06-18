@@ -6,7 +6,6 @@ import { useTranslations } from "next-intl";
 import { Settings as SettingsIcon } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { settingsApi, type SystemSettings, ApiError } from "@/lib/api-client";
@@ -45,22 +44,21 @@ export function AdminSettingsView() {
         <Row label={t("defaultLanguage")} value={data.default_language} />
         <Row
           label={t("rateLimit")}
-          value={`${data.rate_limit_per_minute_per_ip} / min`}
+          value={`${data.rate_limit_query_per_minute} / min`}
         />
         <Row
           label={t("retentionDays")}
-          value={`${data.audit_log_retention_days} d`}
+          value={`${data.audit_retention_days} d`}
         />
-        <div className="space-y-1.5">
-          <p className="font-medium">{t("featureFlags")}</p>
-          <div className="flex flex-wrap gap-1">
-            {Object.entries(data.feature_flags).map(([k, v]) => (
-              <Badge key={k} variant={v ? "success" : "secondary"}>
-                {k}={String(v)}
-              </Badge>
-            ))}
-          </div>
-        </div>
+        <Row
+          label={t("feedbackRetention")}
+          value={`${data.feedback_retention_days} d`}
+        />
+        <Row label={t("maxDocSize")} value={`${data.max_doc_size_mb} MB`} />
+        <Row
+          label={t("allowSignup")}
+          value={data.allow_signup ? t("yes") : t("no")}
+        />
         <p className="text-xs text-muted-foreground">{t("readOnly")}</p>
       </CardContent>
     </Card>

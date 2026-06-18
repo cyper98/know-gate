@@ -223,9 +223,13 @@
       "title": "Cài đặt",
       "subtitle": "Tuỳ chọn áp dụng cho toàn hệ thống. Một số mục chỉ-đọc trong bản này.",
       "defaultLanguage": "Ngôn ngữ mặc định",
-      "rateLimit": "Giới hạn tần suất (yêu cầu / phút / IP)",
+      "rateLimit": "Giới hạn tần suất (truy vấn / phút)",
       "retentionDays": "Thời gian giữ nhật ký (ngày)",
-      "featureFlags": "Cờ tính năng",
+      "feedbackRetention": "Thời gian giữ phản hồi (ngày)",
+      "maxDocSize": "Kích thước tài liệu tối đa",
+      "allowSignup": "Cho phép đăng ký",
+      "yes": "Có",
+      "no": "Không",
       "readOnly": "Chỉ-đọc trong bản này"
     },
     "audit": {
