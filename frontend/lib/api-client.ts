@@ -113,7 +113,10 @@ function clearCookie(name: string): void {
   document.cookie = `${name}=; path=/; max-age=0; SameSite=Lax`;
 }
 
-export function setAccessToken(token: string | null, expiresInSec?: number): void {
+export function setAccessToken(
+  token: string | null,
+  expiresInSec?: number,
+): void {
   accessToken = token;
   if (token) {
     const ttl = expiresInSec ?? 15 * 60;
@@ -171,9 +174,7 @@ interface RequestOptions {
   raw?: boolean;
 }
 
-function buildQuery(
-  query: RequestOptions["query"],
-): string {
+function buildQuery(query: RequestOptions["query"]): string {
   if (!query) return "";
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(query)) {
@@ -248,7 +249,8 @@ async function doFetch<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     const err = body.error;
     throw new ApiError(
       response.status,
-      err?.code ?? `E${response.status === 401 ? "3" : response.status === 403 ? "4" : "1"}`,
+      err?.code ??
+        `E${response.status === 401 ? "3" : response.status === 403 ? "4" : "1"}`,
       err?.message ?? `Request failed (${response.status})`,
       err?.details,
     );
@@ -363,13 +365,17 @@ export const feedbackApi = {
 // === Documents ===
 
 export const documentsApi = {
-  async list(params: {
-    source_id?: string;
-    status?: string;
-    language?: string;
-    cursor?: string;
-    limit?: number;
-  } = {}): Promise<Page<Document>> {
+  async list(
+    params: {
+      source?: string;
+      status?: string;
+      owner?: string;
+      language?: string;
+      title_contains?: string;
+      cursor?: string;
+      limit?: number;
+    } = {},
+  ): Promise<Page<Document>> {
     return doFetch<Page<Document>>("/api/v1/documents", { query: params });
   },
   async get(id: string): Promise<Document> {
@@ -418,18 +424,27 @@ export const sourcesApi = {
 // === Sync jobs ===
 
 export const syncJobsApi = {
-  async list(params: { source_id?: string; cursor?: string; limit?: number } = {}): Promise<Page<SyncJob>> {
+  async list(
+    params: { source_id?: string; cursor?: string; limit?: number } = {},
+  ): Promise<Page<SyncJob>> {
     return doFetch<Page<SyncJob>>("/api/v1/sync-jobs", { query: params });
   },
   async get(id: string): Promise<SyncJob> {
     return doFetch<SyncJob>(`/api/v1/sync-jobs/${id}`);
   },
   async retry(id: string): Promise<SyncJob> {
-    return doFetch<SyncJob>(`/api/v1/sync-jobs/${id}/retry`, { method: "POST" });
+    return doFetch<SyncJob>(`/api/v1/sync-jobs/${id}/retry`, {
+      method: "POST",
+    });
   },
   stream(
     id: string,
-    onEvent: (ev: { ts: string; stage?: string; progress?: number; message?: string }) => void,
+    onEvent: (ev: {
+      ts: string;
+      stage?: string;
+      progress?: number;
+      message?: string;
+    }) => void,
     signal?: AbortSignal,
   ): { abort: () => void } {
     const controller = new AbortController();
@@ -494,7 +509,9 @@ export const syncJobsApi = {
 // === RBAC ===
 
 export const usersApi = {
-  async list(params: { cursor?: string; limit?: number; role?: string } = {}): Promise<Page<User>> {
+  async list(
+    params: { cursor?: string; limit?: number; role?: string } = {},
+  ): Promise<Page<User>> {
     return doFetch<Page<User>>("/api/v1/users", { query: params });
   },
   async invite(body: UserInviteRequest): Promise<User> {
@@ -523,7 +540,9 @@ export const usersApi = {
 };
 
 export const rolesApi = {
-  async list(params: { cursor?: string; limit?: number } = {}): Promise<Page<Role>> {
+  async list(
+    params: { cursor?: string; limit?: number } = {},
+  ): Promise<Page<Role>> {
     return doFetch<Page<Role>>("/api/v1/roles", { query: params });
   },
   async create(body: RoleCreate): Promise<Role> {
@@ -541,7 +560,9 @@ export const rolesApi = {
 };
 
 export const groupsApi = {
-  async list(params: { cursor?: string; limit?: number } = {}): Promise<Page<Group>> {
+  async list(
+    params: { cursor?: string; limit?: number } = {},
+  ): Promise<Page<Group>> {
     return doFetch<Page<Group>>("/api/v1/groups", { query: params });
   },
   async create(body: GroupCreate): Promise<Group> {
@@ -557,8 +578,9 @@ export const groupsApi = {
     return doFetch<void>(`/api/v1/groups/${id}`, { method: "DELETE" });
   },
   async addMember(groupId: string, userId: string): Promise<void> {
-    return doFetch<void>(`/api/v1/groups/${groupId}/users/${userId}`, {
+    return doFetch<void>(`/api/v1/groups/${groupId}/users`, {
       method: "POST",
+      body: { user_id: userId },
     });
   },
   async removeMember(groupId: string, userId: string): Promise<void> {
@@ -567,8 +589,9 @@ export const groupsApi = {
     });
   },
   async addDocument(groupId: string, docId: string): Promise<void> {
-    return doFetch<void>(`/api/v1/groups/${groupId}/documents/${docId}`, {
+    return doFetch<void>(`/api/v1/groups/${groupId}/documents`, {
       method: "POST",
+      body: { document_id: docId },
     });
   },
   async removeDocument(groupId: string, docId: string): Promise<void> {
@@ -585,10 +608,22 @@ export const settingsApi = {
     return doFetch<SystemSettings>("/api/v1/settings");
   },
   async update(body: SystemSettingsUpdate): Promise<SystemSettings> {
-    return doFetch<SystemSettings>("/api/v1/settings", { method: "PATCH", body });
+    return doFetch<SystemSettings>("/api/v1/settings", {
+      method: "PATCH",
+      body,
+    });
   },
-  async auditLog(params: { cursor?: string; limit?: number; user_id?: string; action?: string } = {}): Promise<Page<AuditLogEntry>> {
-    return doFetch<Page<AuditLogEntry>>("/api/v1/settings/audit-log", { query: params });
+  async auditLog(
+    params: {
+      cursor?: string;
+      limit?: number;
+      user_id?: string;
+      action?: string;
+    } = {},
+  ): Promise<Page<AuditLogEntry>> {
+    return doFetch<Page<AuditLogEntry>>("/api/v1/settings/audit-log", {
+      query: params,
+    });
   },
 };
 

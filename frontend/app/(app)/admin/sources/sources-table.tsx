@@ -1,16 +1,33 @@
 "use client";
 
-/** AdminSourcesTable — list of sources + "Sync now" action. */
+/** AdminSourcesTable — list of sources + "Sync now" action + create dialog. */
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { RefreshCw, Trash2, Database } from "lucide-react";
+import { RefreshCw, Trash2, Database, Plus } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { EmptyState } from "@/components/empty-state";
-import { sourcesApi, type Source, ApiError } from "@/lib/api-client";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  sourcesApi,
+  type Source,
+  type SourceType,
+  ApiError,
+} from "@/lib/api-client";
 
 export function AdminSourcesTable() {
   const t = useTranslations("admin.sources");
@@ -58,8 +75,9 @@ export function AdminSourcesTable() {
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <CardTitle className="text-base">{t("title")}</CardTitle>
+        <CreateSourceDialog onCreated={reload} />
       </CardHeader>
       <CardContent className="space-y-3">
         {error && <p className="text-sm text-destructive">{error}</p>}
@@ -83,7 +101,9 @@ export function AdminSourcesTable() {
                   <th className="py-2 pr-3 font-medium">{t("type")}</th>
                   <th className="py-2 pr-3 font-medium">{t("status")}</th>
                   <th className="py-2 pr-3 font-medium">{t("lastSync")}</th>
-                  <th className="py-2 pr-3 font-medium">{tCommon("actions")}</th>
+                  <th className="py-2 pr-3 font-medium">
+                    {tCommon("actions")}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -141,5 +161,124 @@ export function AdminSourcesTable() {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function CreateSourceDialog({ onCreated }: { onCreated: () => void }) {
+  const t = useTranslations("admin.sources");
+  const tCommon = useTranslations("common");
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [type, setType] = useState<SourceType>("google_drive");
+  const [folderId, setFolderId] = useState("");
+  const [integrationToken, setIntegrationToken] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    const config: Record<string, unknown> = {};
+    if (type === "google_drive" && folderId.trim()) {
+      config.folder_id = folderId.trim();
+    }
+    if (type === "notion" && integrationToken.trim()) {
+      config.integration_token = integrationToken.trim();
+    }
+    try {
+      await sourcesApi.create({ name, type, config });
+      setOpen(false);
+      setName("");
+      setFolderId("");
+      setIntegrationToken("");
+      setType("google_drive");
+      onCreated();
+    } catch (err) {
+      if (err instanceof ApiError) setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm">
+          <Plus className="h-4 w-4" />
+          {t("newSource")}
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t("createTitle")}</DialogTitle>
+          <DialogDescription>{t("createIntro")}</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={submit} className="space-y-3">
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          <div className="space-y-1.5">
+            <Label htmlFor="source-name">{t("name")}</Label>
+            <Input
+              id="source-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="source-type">{t("type")}</Label>
+            <select
+              id="source-type"
+              value={type}
+              onChange={(e) => setType(e.target.value as SourceType)}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <option value="google_drive">{t("typeGoogleDrive")}</option>
+              <option value="notion">{t("typeNotion")}</option>
+            </select>
+          </div>
+          {type === "google_drive" && (
+            <div className="space-y-1.5">
+              <Label htmlFor="source-folder-id">{t("folderId")}</Label>
+              <Input
+                id="source-folder-id"
+                value={folderId}
+                onChange={(e) => setFolderId(e.target.value)}
+                placeholder={t("folderIdHint")}
+              />
+            </div>
+          )}
+          {type === "notion" && (
+            <div className="space-y-1.5">
+              <Label htmlFor="source-token">{t("integrationToken")}</Label>
+              <Input
+                id="source-token"
+                type="password"
+                value={integrationToken}
+                onChange={(e) => setIntegrationToken(e.target.value)}
+                placeholder={t("integrationTokenHint")}
+                required
+              />
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+            >
+              {tCommon("cancel")}
+            </Button>
+            <Button type="submit" disabled={busy || !name.trim()}>
+              {busy ? "..." : t("create")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

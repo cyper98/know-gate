@@ -9,6 +9,7 @@ import {
   Search,
   History,
   Database,
+  FileText,
   Users,
   Shield,
   FolderTree,
@@ -30,6 +31,7 @@ interface NavItem {
     | "query"
     | "history"
     | "sources"
+    | "documents"
     | "users"
     | "roles"
     | "groups"
@@ -44,12 +46,38 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", labelKey: "dashboard", icon: LayoutDashboard },
   { href: "/query", labelKey: "query", icon: Search },
   { href: "/query/history", labelKey: "history", icon: History },
-  { href: "/admin/sources", labelKey: "sources", icon: Database, roles: ["admin"] },
+  {
+    href: "/admin/sources",
+    labelKey: "sources",
+    icon: Database,
+    roles: ["admin"],
+  },
+  {
+    href: "/admin/documents",
+    labelKey: "documents",
+    icon: FileText,
+    roles: ["admin"],
+  },
   { href: "/admin/users", labelKey: "users", icon: Users, roles: ["admin"] },
   { href: "/admin/roles", labelKey: "roles", icon: Shield, roles: ["admin"] },
-  { href: "/admin/groups", labelKey: "groups", icon: FolderTree, roles: ["admin"] },
-  { href: "/admin/settings", labelKey: "settings", icon: SettingsIcon, roles: ["admin"] },
-  { href: "/admin/audit-log", labelKey: "auditLog", icon: ScrollText, roles: ["admin"] },
+  {
+    href: "/admin/groups",
+    labelKey: "groups",
+    icon: FolderTree,
+    roles: ["admin"],
+  },
+  {
+    href: "/admin/settings",
+    labelKey: "settings",
+    icon: SettingsIcon,
+    roles: ["admin"],
+  },
+  {
+    href: "/admin/audit-log",
+    labelKey: "auditLog",
+    icon: ScrollText,
+    roles: ["admin"],
+  },
 ];
 
 interface Props {
@@ -70,11 +98,23 @@ export function AppShell({ children }: Props) {
         </div>
         <nav className="flex-1 space-y-1 p-2">
           {NAV_ITEMS.map((item) => {
-            if (item.roles && (!user || !user.roles.some((r) => item.roles!.includes(r)))) {
+            if (
+              item.roles &&
+              (!user || !user.roles.some((r) => item.roles!.includes(r)))
+            ) {
               return null;
             }
             const Icon = item.icon;
-            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const active =
+              pathname === item.href ||
+              (pathname.startsWith(`${item.href}/`) &&
+                !NAV_ITEMS.some(
+                  (other) =>
+                    other.href !== item.href &&
+                    other.href.startsWith(`${item.href}/`) &&
+                    (pathname === other.href ||
+                      pathname.startsWith(`${other.href}/`)),
+                ));
             return (
               <Link
                 key={item.href}
@@ -94,7 +134,11 @@ export function AppShell({ children }: Props) {
         </nav>
         <div className="border-t p-2">
           <form action={logoutAction}>
-            <Button variant="ghost" className="w-full justify-start" type="submit">
+            <Button
+              variant="ghost"
+              className="w-full justify-start"
+              type="submit"
+            >
               <LogOut className="mr-2 h-4 w-4" />
               {t("logout")}
             </Button>
@@ -108,12 +152,15 @@ export function AppShell({ children }: Props) {
             <LangSwitcher />
             {user && (
               <div className="hidden text-sm text-muted-foreground md:block">
-                {user.display_name} · {tCommon("language")}: {user.language_pref ?? "en"}
+                {user.display_name} · {tCommon("language")}:{" "}
+                {user.language_pref ?? "en"}
               </div>
             )}
           </div>
         </header>
-        <main className="flex-1 overflow-y-auto bg-background p-4 md:p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto bg-background p-4 md:p-6">
+          {children}
+        </main>
       </div>
     </div>
   );

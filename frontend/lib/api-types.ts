@@ -141,24 +141,40 @@ export interface QueryHistoryItem {
 
 // === Documents ===
 
-export type DocumentStatus = "active" | "indexing" | "stale" | "deleted";
+export type DocumentStatus =
+  | "discovered"
+  | "indexing"
+  | "active"
+  | "outdated"
+  | "deprecated"
+  | "archived"
+  | "deleted";
 
 export interface Document {
   id: string;
+  source: string;
+  source_id: string;
+  source_url: string | null;
+  source_modified_at: string | null;
   title: string;
-  source_id?: string;
-  source_type?: string;
-  language?: string;
+  owner: string | null;
+  document_type: string | null;
+  mime_type: string | null;
+  size_bytes: number | null;
+  language: string | null;
   status: DocumentStatus;
-  url?: string;
+  indexed_at: string | null;
+  error_message: string | null;
+  access_groups: string[];
   created_at: string;
   updated_at: string;
-  chunk_count?: number;
 }
 
 export interface DocumentUpdate {
   title?: string;
-  language?: string;
+  owner?: string;
+  status?: DocumentStatus;
+  access_group_ids?: string[];
 }
 
 export interface DocumentPreview {
@@ -266,7 +282,7 @@ export interface Group {
   id: string;
   name: string;
   description?: string;
-  member_count?: number;
+  user_count?: number;
   document_count?: number;
   created_at: string;
   updated_at: string;

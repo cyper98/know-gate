@@ -36,6 +36,8 @@ services:
       - ../frontend/app:/app/app:ro
       - ../frontend/components:/app/components:ro
       - ../frontend/lib:/app/lib:ro
+      - ../frontend/messages:/app/messages:ro
+      - ../frontend/i18n:/app/i18n:ro
     environment:
       NODE_ENV: development
       NEXT_PUBLIC_API_URL: http://localhost:8000

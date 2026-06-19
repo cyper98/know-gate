@@ -78,6 +78,7 @@
     "history": "Lịch sử",
     "admin": "Quản trị",
     "sources": "Nguồn dữ liệu",
+    "documents": "Tài liệu",
     "users": "Người dùng",
     "roles": "Vai trò",
     "groups": "Nhóm",
@@ -165,7 +166,31 @@
       "jobFinished": "Kết thúc",
       "jobStage": "Giai đoạn",
       "jobItemsProcessed": "{count} mục",
-      "liveProgress": "Tiến trình trực tiếp"
+      "liveProgress": "Tiến trình trực tiếp",
+      "folderId": "ID thư mục (tuỳ chọn)",
+      "folderIdHint": "Để trống để đồng bộ toàn bộ drive.",
+      "integrationToken": "Token tích hợp",
+      "integrationTokenHint": "Lấy từ trang tích hợp Notion của bạn.",
+      "selectType": "Chọn loại nguồn",
+      "configGoogleDrive": "Cấu hình Google Drive",
+      "configNotion": "Cấu hình Notion"
+    },
+    "documents": {
+      "title": "Tài liệu",
+      "subtitle": "Duyệt và quản lý tất cả tài liệu đã lập chỉ mục.",
+      "docTitle": "Tiêu đề",
+      "source": "Nguồn",
+      "status": "Trạng thái",
+      "language": "Ngôn ngữ",
+      "owner": "Chủ sở hữu",
+      "updatedAt": "Cập nhật",
+      "preview": "Xem trước",
+      "deleteConfirm": "Xoá tài liệu này? Nó sẽ bị gỡ khỏi kết quả tìm kiếm.",
+      "filterTitle": "Tìm theo tiêu đề",
+      "filterStatus": "Mọi trạng thái",
+      "filterSource": "Mọi nguồn",
+      "filterLanguage": "Mọi ngôn ngữ",
+      "noDocs": "Không tìm thấy tài liệu. Thêm nguồn và đồng bộ để nhập tài liệu."
     },
     "users": {
       "title": "Người dùng",
@@ -184,7 +209,11 @@
       "deleteConfirm": "Xoá {name}? Họ sẽ không thể đăng nhập nữa.",
       "addRole": "Thêm vai trò",
       "removeRole": "Gỡ vai trò",
-      "lastAdminGuard": "Không thể gỡ admin duy nhất."
+      "lastAdminGuard": "Không thể gỡ admin duy nhất.",
+      "selectRole": "Chọn vai trò",
+      "addRoleTitle": "Thêm vai trò cho {name}",
+      "roleAssigned": "Đã gán vai trò",
+      "roleRevoked": "Đã gỡ vai trò"
     },
     "roles": {
       "title": "Vai trò",
@@ -199,7 +228,10 @@
       "delete": "Xoá vai trò",
       "deleteConfirm": "Xoá vai trò {name}? Người dùng đang giữ vai trò sẽ mất quyền tương ứng.",
       "inUseBlock": "Không thể xoá vai trò đang được gán cho người dùng.",
-      "staticBlock": "Không thể xoá vai trò mặc định."
+      "staticBlock": "Không thể xoá vai trò mặc định.",
+      "description": "Mô tả",
+      "selectAll": "Chọn tất cả",
+      "deselectAll": "Bỏ chọn tất cả"
     },
     "groups": {
       "title": "Nhóm",
@@ -217,7 +249,11 @@
       "addMember": "Thêm thành viên",
       "removeMember": "Gỡ thành viên",
       "addDocument": "Thêm tài liệu",
-      "removeDocument": "Gỡ tài liệu"
+      "removeDocument": "Gỡ tài liệu",
+      "addMemberTitle": "Thêm thành viên vào {name}",
+      "selectUser": "Chọn người dùng",
+      "memberAdded": "Đã thêm thành viên",
+      "memberRemoved": "Đã gỡ thành viên"
     },
     "settings": {
       "title": "Cài đặt",

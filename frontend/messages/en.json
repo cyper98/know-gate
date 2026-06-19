@@ -78,6 +78,7 @@
     "history": "History",
     "admin": "Admin",
     "sources": "Sources",
+    "documents": "Documents",
     "users": "Users",
     "roles": "Roles",
     "groups": "Groups",
@@ -165,7 +166,31 @@
       "jobFinished": "Finished",
       "jobStage": "Stage",
       "jobItemsProcessed": "{count} items",
-      "liveProgress": "Live progress"
+      "liveProgress": "Live progress",
+      "folderId": "Folder ID (optional)",
+      "folderIdHint": "Leave empty to sync the entire drive.",
+      "integrationToken": "Integration token",
+      "integrationTokenHint": "Get this from your Notion integrations page.",
+      "selectType": "Select a source type",
+      "configGoogleDrive": "Google Drive configuration",
+      "configNotion": "Notion configuration"
+    },
+    "documents": {
+      "title": "Documents",
+      "subtitle": "Browse and manage all indexed documents.",
+      "docTitle": "Title",
+      "source": "Source",
+      "status": "Status",
+      "language": "Language",
+      "owner": "Owner",
+      "updatedAt": "Updated",
+      "preview": "Preview",
+      "deleteConfirm": "Delete this document? It will be removed from search results.",
+      "filterTitle": "Search by title",
+      "filterStatus": "All statuses",
+      "filterSource": "All sources",
+      "filterLanguage": "All languages",
+      "noDocs": "No documents found. Add a source and sync to import documents."
     },
     "users": {
       "title": "Users",
@@ -184,7 +209,11 @@
       "deleteConfirm": "Delete {name}? They will no longer be able to sign in.",
       "addRole": "Add role",
       "removeRole": "Remove role",
-      "lastAdminGuard": "Cannot remove the only admin."
+      "lastAdminGuard": "Cannot remove the only admin.",
+      "selectRole": "Select a role",
+      "addRoleTitle": "Add role to {name}",
+      "roleAssigned": "Role assigned",
+      "roleRevoked": "Role removed"
     },
     "roles": {
       "title": "Roles",
@@ -199,7 +228,10 @@
       "delete": "Delete role",
       "deleteConfirm": "Delete role {name}? Users with this role will lose its permissions.",
       "inUseBlock": "Cannot delete a role that is still assigned to users.",
-      "staticBlock": "Cannot delete a built-in role."
+      "staticBlock": "Cannot delete a built-in role.",
+      "description": "Description",
+      "selectAll": "Select all",
+      "deselectAll": "Deselect all"
     },
     "groups": {
       "title": "Groups",
@@ -217,7 +249,11 @@
       "addMember": "Add member",
       "removeMember": "Remove member",
       "addDocument": "Add document",
-      "removeDocument": "Remove document"
+      "removeDocument": "Remove document",
+      "addMemberTitle": "Add member to {name}",
+      "selectUser": "Select a user",
+      "memberAdded": "Member added",
+      "memberRemoved": "Member removed"
     },
     "settings": {
       "title": "Settings",
